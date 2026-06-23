@@ -1,0 +1,31 @@
+# Local memory and run artifacts
+audit_memory.md
+runs/
+*.bak
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tool/runtime caches
+.mypy_cache/
+.ruff_cache/
+node_modules/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Generated modeling workspaces
+modeling_state.json.lock
+/results/

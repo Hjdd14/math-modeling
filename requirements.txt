@@ -1,0 +1,8 @@
+# 数学建模工具依赖
+pandas>=2.0.0
+openpyxl>=3.1.0
+numpy>=1.24.0
+Pillow>=10.0.0
+pytest>=7.0.0
+pypdf>=4.0.0
+python-docx>=1.1.0

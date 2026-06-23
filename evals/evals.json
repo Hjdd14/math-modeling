@@ -1,0 +1,40 @@
+{
+  "skill_name": "math-modeling",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我有一个数学建模竞赛题 PDF 和 data.xlsx 附件，请用 Python 完整完成建模、报告、代码、图表和验证。",
+      "expected_output": "生成 problem_brief.md、final_solution.json、model_decision.md、modeling_report.md、solution.py、results/ 和状态记忆文件。",
+      "files": ["problem.pdf", "data.xlsx"],
+      "assertions": ["必须执行 Phase 1 五视角并行 Agent", "必须记录并行批评和并行修正", "必须执行 Phase 4 并行审查"]
+    },
+    {
+      "id": 2,
+      "prompt": "题目在 Word 文档里，附件是 CSV，我希望用 MATLAB 做数学建模并输出图表。",
+      "expected_output": "生成 MATLAB 分支产物 solution.m，所有输出写入 results/。",
+      "files": ["problem.docx", "data.csv"],
+      "assertions": ["必须保留文档 Agent 与代码 Agent 并行", "必须记录 MATLAB 语言选择", "必须执行并行审查 Agent"]
+    },
+    {
+      "id": 3,
+      "prompt": "继续上次没做完的数学建模任务，检查已有文件后从中断处恢复。",
+      "expected_output": "读取 modeling_state.json 和 modeling_memory.md，检查已有产物并恢复阶段。",
+      "files": [],
+      "assertions": ["必须检查并行 Agent 产物是否存在", "必须恢复 tool_runs 和 agent_runs", "必须说明下一步并行阶段"]
+    },
+    {
+      "id": 4,
+      "prompt": "帮我验证这个已经写好的 Python 数学建模解答是否完整，重点看图表和结果目录。",
+      "expected_output": "运行 pipeline_check.py 并报告失败项。",
+      "files": ["problem_brief.md", "modeling_report.md", "solution.py", "results/"],
+      "assertions": ["必须检查并行审查摘要", "必须验证 results/ 输出", "必须给出工具链结果"]
+    },
+    {
+      "id": 5,
+      "prompt": "这个题要比较多种建模方案，别只给一个想法，请让不同专家视角讨论后再定模型。",
+      "expected_output": "使用五视角建模共识，输出 final_solution.json 和 model_decision.md。",
+      "files": ["problem.md", "data.xlsx"],
+      "assertions": ["必须并行生成方案", "必须并行批评", "必须并行修正"]
+    }
+  ]
+}

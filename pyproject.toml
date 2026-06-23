@@ -1,0 +1,22 @@
+[project]
+name = "math-modeling-skill"
+version = "1.0.0"
+description = "A math modeling competition skill with parallel Agent gates, runnable tools, resumable state, Python and MATLAB support."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "math-modeling contributors" }
+]
+dependencies = [
+  "pandas>=2.0.0",
+  "openpyxl>=3.1.0",
+  "matplotlib>=3.7.0",
+  "numpy>=1.24.0",
+  "pypdf>=4.0.0",
+  "python-docx>=1.1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

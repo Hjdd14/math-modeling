@@ -1,0 +1,22 @@
+[
+  {"query": "我有一个数学建模竞赛题 PDF 和附件 xlsx，帮我完成建模论文、Python 代码、图表和结果验证", "should_trigger": true},
+  {"query": "C题题目在 problem.docx，附件是 data.csv，用 MATLAB 做完整数学建模流程", "should_trigger": true},
+  {"query": "请根据这个赛题和 Excel 附件生成 problem_brief、建模报告、可运行代码和结果图", "should_trigger": true},
+  {"query": "继续上次的数学建模任务，从 modeling_memory.md 恢复并检查结果", "should_trigger": true},
+  {"query": "这个优化问题要多专家视角讨论，最后输出建模方案和代码", "should_trigger": true},
+  {"query": "帮我做数学建模竞赛 A 题，附件有多张表，需要报告和程序", "should_trigger": true},
+  {"query": "我想用 Python 求解一个带约束的建模赛题，并输出论文里的图表", "should_trigger": true},
+  {"query": "请验证我的数学建模解答，检查代码、公式、图和 results 目录", "should_trigger": true},
+  {"query": "需要 MATLAB 版数学建模代码，题目和数据我都给你", "should_trigger": true},
+  {"query": "建模报告要有 LaTeX 公式，代码要跑通，还要多轮检查", "should_trigger": true},
+  {"query": "帮我解这个高中数学题：求二次函数最大值", "should_trigger": false},
+  {"query": "把这个英文 PDF 翻译成中文，保持排版", "should_trigger": false},
+  {"query": "帮我清洗这个 Excel，删除空行并做一个统计表", "should_trigger": false},
+  {"query": "写一个 Python 函数计算斐波那契数列", "should_trigger": false},
+  {"query": "润色我的论文摘要，让它更自然", "should_trigger": false},
+  {"query": "把 CSV 画成一张折线图，不需要建模报告", "should_trigger": false},
+  {"query": "帮我检查 LaTeX 编译错误", "should_trigger": false},
+  {"query": "读取这个 PDF 并总结主要内容", "should_trigger": false},
+  {"query": "帮我做 PPT，主题是数学建模介绍", "should_trigger": false},
+  {"query": "翻译这个 Word 文档里的数学公式说明", "should_trigger": false}
+]

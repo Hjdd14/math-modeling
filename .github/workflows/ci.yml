@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile tools
+        run: python -m compileall tools
+
+      - name: Run pytest
+        run: python -m pytest tests -q
+
+      - name: Run test orchestrator
+        run: python tests/run_all_tests.py
+
+      - name: Verify fixture workspace
+        run: python tools/pipeline_check.py --workspace tests/test_data --language python
+
+      - name: Resume fixture workspace
+        run: python tools/workflow_runner.py resume --workspace tests/test_data --language python

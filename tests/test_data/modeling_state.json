@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "workspace": "C:\\Users\\PC\\.claude\\skills\\math-modeling\\tests\\test_data",
+  "language": "python",
+  "current_phase": "phase4",
+  "phases": {},
+  "artifacts": {
+    "problem_brief": {
+      "path": "problem_brief.md",
+      "exists": true,
+      "kind": "file",
+      "size": 1241,
+      "mtime": "2026-06-07T14:31:36.031811+00:00"
+    },
+    "modeling_memory": {
+      "path": "modeling_memory.md",
+      "exists": false,
+      "kind": "file"
+    },
+    "final_solution": {
+      "path": "final_solution.json",
+      "exists": false,
+      "kind": "file"
+    },
+    "model_decision": {
+      "path": "model_decision.md",
+      "exists": false,
+      "kind": "file"
+    },
+    "modeling_report": {
+      "path": "modeling_report.md",
+      "exists": true,
+      "kind": "file",
+      "size": 776,
+      "mtime": "2026-06-07T14:31:36.032817+00:00"
+    },
+    "results_dir": {
+      "path": "results",
+      "exists": true,
+      "kind": "directory"
+    },
+    "solution": {
+      "path": "solution.py",
+      "exists": true,
+      "kind": "file",
+      "size": 608,
+      "mtime": "2026-06-07T14:31:36.032817+00:00"
+    }
+  },
+  "tool_runs": [],
+  "agent_runs": [],
+  "issues": [],
+  "updated_at": "2026-06-23T13:43:06.695327+00:00"
+}
