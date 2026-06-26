@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a reproducible problem in the skill, tools, docs, or workflow.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Provide a minimal, non-sensitive example.
+      placeholder: |
+        1. Run ...
+        2. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification output
+      description: Paste relevant command output. Remove secrets and private data.
+      placeholder: |
+        python -m pytest tests -q
+        python tools/pipeline_check.py --workspace ... --language python
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - SKILL.md / references
+        - Input parser
+        - State manager
+        - Pipeline check
+        - Consistency checker
+        - MATLAB support
+        - Parallel Agent workflow
+        - GitHub/release metadata
+    validations:
+      required: true

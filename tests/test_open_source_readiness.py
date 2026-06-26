@@ -23,6 +23,12 @@ def test_required_open_source_files_exist():
         ".gitignore",
         "docs/RELEASE_CHECKLIST.md",
         "docs/PORTABILITY.md",
+        "docs/GITHUB_DESKTOP.md",
+        ".github/pull_request_template.md",
+        ".github/ISSUE_TEMPLATE/bug_report.yml",
+        ".github/ISSUE_TEMPLATE/feature_request.yml",
+        ".github/ISSUE_TEMPLATE/config.yml",
+        ".github/dependabot.yml",
         ".github/workflows/ci.yml",
     ]
     missing = [path for path in required if not (SKILL_DIR / path).exists()]

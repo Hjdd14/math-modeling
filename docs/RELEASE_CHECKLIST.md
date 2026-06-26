@@ -10,6 +10,8 @@
 - [ ] `CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md` 已存在。
 - [ ] `.gitignore` 排除 `audit_memory.md`、`runs/`、缓存和备份文件。
 - [ ] `.github/workflows/ci.yml` 能在 GitHub Actions 运行快速验证。
+- [ ] `.github/ISSUE_TEMPLATE/`、`.github/pull_request_template.md` 和 `.github/dependabot.yml` 已存在。
+- [ ] `docs/GITHUB_DESKTOP.md` 说明如何添加本地仓库但不上传。
 
 ## Skill 完整性
 

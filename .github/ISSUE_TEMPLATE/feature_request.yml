@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest an improvement to the skill, tools, evals, or release workflow.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or maintainer problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the change you want.
+    validations:
+      required: true
+  - type: checkboxes
+    id: workflow-impact
+    attributes:
+      label: Workflow impact
+      options:
+        - label: This changes `SKILL.md` or `references/workflow.md`.
+        - label: This affects fixed artifacts or phase boundaries.
+        - label: This affects the parallel Agent gates.
+        - label: This affects Python tooling.
+        - label: This affects MATLAB support.
+        - label: This affects evals or trigger descriptions.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation idea
+      description: What tests or evals should prove the change works?

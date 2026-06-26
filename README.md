@@ -87,3 +87,7 @@ python tests/run_all_tests.py
 ## 开源许可
 
 本项目使用 MIT License。详见 `LICENSE`。
+
+## 本地 GitHub 仓库
+
+本目录可以直接添加到 GitHub Desktop。步骤见 `docs/GITHUB_DESKTOP.md`。仓库默认不配置 remote，不会自动上传。
