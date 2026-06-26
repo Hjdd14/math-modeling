@@ -1,0 +1,9 @@
+{
+  "baseline_name": "single_best_ratio",
+  "rationale": "按利润/碳排比优先生产产品 A，得到可行下限",
+  "inputs_required": ["data.csv"],
+  "method": "greedy by profit-carbon ratio",
+  "expected_outputs": ["results/output.csv", "results/summary.json"],
+  "limitations": ["不枚举组合，可能错过更优混合方案"]
+}
+

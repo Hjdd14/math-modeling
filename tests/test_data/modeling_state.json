@@ -19,20 +19,24 @@
     },
     "final_solution": {
       "path": "final_solution.json",
-      "exists": false,
-      "kind": "file"
+      "exists": true,
+      "kind": "file",
+      "size": 770,
+      "mtime": "2026-06-26T13:15:45.285979+00:00"
     },
     "model_decision": {
       "path": "model_decision.md",
-      "exists": false,
-      "kind": "file"
+      "exists": true,
+      "kind": "file",
+      "size": 165,
+      "mtime": "2026-06-26T13:15:45.286521+00:00"
     },
     "modeling_report": {
       "path": "modeling_report.md",
       "exists": true,
       "kind": "file",
-      "size": 776,
-      "mtime": "2026-06-07T14:31:36.032817+00:00"
+      "size": 1627,
+      "mtime": "2026-06-26T13:17:01.310926+00:00"
     },
     "results_dir": {
       "path": "results",
@@ -43,12 +47,12 @@
       "path": "solution.py",
       "exists": true,
       "kind": "file",
-      "size": 608,
-      "mtime": "2026-06-07T14:31:36.032817+00:00"
+      "size": 689,
+      "mtime": "2026-06-26T13:17:41.612301+00:00"
     }
   },
   "tool_runs": [],
   "agent_runs": [],
   "issues": [],
-  "updated_at": "2026-06-23T13:43:06.695327+00:00"
+  "updated_at": "2026-06-26T13:20:03.548743+00:00"
 }

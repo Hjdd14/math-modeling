@@ -1,0 +1,36 @@
+{
+  "selected_model": "integer_enumeration",
+  "problem_taxonomy": {"primary_types": ["optimization"], "secondary_types": ["integer_programming"]},
+  "score_matrix": [
+    {
+      "model_name": "greedy_baseline",
+      "problem_fit": 60,
+      "interpretability": 90,
+      "computability": 95,
+      "data_requirement": 90,
+      "robustness": 55,
+      "validation_difficulty": 20,
+      "paper_presentation": 60,
+      "decision": "baseline"
+    },
+    {
+      "model_name": "integer_enumeration",
+      "problem_fit": 95,
+      "interpretability": 90,
+      "computability": 90,
+      "data_requirement": 90,
+      "robustness": 85,
+      "validation_difficulty": 20,
+      "paper_presentation": 88,
+      "decision": "selected"
+    }
+  ],
+  "validation_plan": {
+    "baseline_comparison": "compare objective against greedy baseline",
+    "oracle_tests": "enumerate all feasible integer pairs",
+    "solver_cross_checks": "resource residuals",
+    "sensitivity_analysis": "profit perturbation",
+    "invariants": ["all resource usage <= capacity"]
+  }
+}
+

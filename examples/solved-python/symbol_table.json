@@ -1,0 +1,9 @@
+{
+  "symbols": [
+    {"symbol": "x_a", "meaning": "A 产品产量", "unit": "件", "code_name": "x_a"},
+    {"symbol": "x_b", "meaning": "B 产品产量", "unit": "件", "code_name": "x_b"},
+    {"symbol": "P", "meaning": "总利润", "unit": "元", "code_name": "profit"},
+    {"symbol": "p_A", "meaning": "A 产品单位利润", "unit": "元/件", "code_name": "profit_A"},
+    {"symbol": "p_B", "meaning": "B 产品单位利润", "unit": "元/件", "code_name": "profit_B"}
+  ]
+}

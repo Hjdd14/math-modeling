@@ -27,6 +27,7 @@ def main():
         "test_state_manager.py",
         "test_pipeline_check.py",
         "test_evidence_checker.py",
+        "test_quality_tools.py",
         "test_workflow_runner.py",
         "test_eval_files.py",
         "test_matlab_support.py",

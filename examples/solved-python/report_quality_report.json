@@ -1,0 +1,108 @@
+{
+  "workspace": "examples\\solved-python",
+  "mode": "excellence",
+  "report_path": "examples\\solved-python\\modeling_report.md",
+  "passed": true,
+  "warning": false,
+  "sections_found": 10,
+  "checks": [
+    {
+      "name": "section_abstract",
+      "passed": true,
+      "aliases": [
+        "摘要"
+      ]
+    },
+    {
+      "name": "section_problem",
+      "passed": true,
+      "aliases": [
+        "问题重述",
+        "问题描述",
+        "问题分析"
+      ]
+    },
+    {
+      "name": "section_assumptions",
+      "passed": true,
+      "aliases": [
+        "模型假设",
+        "假设"
+      ]
+    },
+    {
+      "name": "section_symbols",
+      "passed": true,
+      "aliases": [
+        "符号说明",
+        "符号表"
+      ]
+    },
+    {
+      "name": "section_model",
+      "passed": true,
+      "aliases": [
+        "模型建立",
+        "模型构建",
+        "模型"
+      ]
+    },
+    {
+      "name": "section_solution",
+      "passed": true,
+      "aliases": [
+        "模型求解",
+        "求解"
+      ]
+    },
+    {
+      "name": "section_validation",
+      "passed": true,
+      "aliases": [
+        "模型验证",
+        "结果验证",
+        "检验"
+      ]
+    },
+    {
+      "name": "section_sensitivity",
+      "passed": true,
+      "aliases": [
+        "敏感性分析",
+        "鲁棒性分析"
+      ]
+    },
+    {
+      "name": "section_evaluation",
+      "passed": true,
+      "aliases": [
+        "模型评价",
+        "优缺点",
+        "改进"
+      ]
+    },
+    {
+      "name": "section_conclusion",
+      "passed": true,
+      "aliases": [
+        "结论",
+        "决策建议"
+      ]
+    },
+    {
+      "name": "figure_references",
+      "passed": true,
+      "count": 2
+    },
+    {
+      "name": "abstract_has_results",
+      "passed": true
+    },
+    {
+      "name": "overclaim_terms",
+      "passed": true,
+      "terms": []
+    }
+  ],
+  "issues": []
+}

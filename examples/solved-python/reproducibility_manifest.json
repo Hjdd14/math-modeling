@@ -1,0 +1,8 @@
+{
+  "python_version": "3.14",
+  "dependencies": {"pandas": ">=2.0", "matplotlib": ">=3.7"},
+  "random_seed": 42,
+  "input_hashes": [],
+  "output_hashes": []
+}
+

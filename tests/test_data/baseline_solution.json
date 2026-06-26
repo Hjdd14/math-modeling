@@ -1,0 +1,9 @@
+{
+  "baseline_name": "simple_feasible_plan",
+  "rationale": "选择一个可行产量方案作为利润下限",
+  "inputs_required": ["problem_brief.md"],
+  "method": "manual feasible point",
+  "expected_outputs": ["results/output.csv"],
+  "limitations": ["不保证最优"]
+}
+

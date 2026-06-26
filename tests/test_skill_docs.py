@@ -127,3 +127,43 @@ def test_phase1_outputs_decision_files_not_modeling_report():
     assert "final_solution.json" in phase1
     assert "model_decision.md" in phase1
     assert "不得写入 `modeling_report.md`" in phase1
+
+
+def test_1_2_excellence_delivery_gates_are_documented():
+    """测试：1.2.0 一等奖级交付增强必须被主入口和工作流引用"""
+    content = read_skill_doc()
+    workflow_path = os.path.join(SKILL_DIR, "references", "workflow.md")
+    templates_path = os.path.join(SKILL_DIR, "references", "templates.md")
+    tools_path = os.path.join(SKILL_DIR, "references", "tools.md")
+    with open(workflow_path, "r", encoding="utf-8") as f:
+        workflow = f.read()
+    with open(templates_path, "r", encoding="utf-8") as f:
+        templates = f.read()
+    with open(tools_path, "r", encoding="utf-8") as f:
+        tools_doc = f.read()
+    combined = "\n".join([content, workflow, templates, tools_doc])
+
+    required_terms = [
+        "model_spec.json",
+        "data_schema.json",
+        "schema_checker.py",
+        "solution_tests.py",
+        "symbol_table.json",
+        "unit_checker.py",
+        "solver_strategy.json",
+        "reproducibility_manifest.json",
+        "figure_style.json",
+        "figure_auditor.py",
+        "figure_storyboard.md",
+        "report_auditor.py",
+        "scoring_strategy.md",
+        "ablation_study.json",
+        "decision_insights.md",
+        "defense_questions.md",
+        "可视化设计 Agent",
+        "竞赛论文表现力 Agent",
+        "评委质询 Agent",
+        "--quality-mode",
+    ]
+    for term in required_terms:
+        assert term in combined

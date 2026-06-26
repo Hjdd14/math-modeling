@@ -1,0 +1,11 @@
+{
+  "dpi": 300,
+  "export_dpi": 600,
+  "font_family": "DejaVu Sans",
+  "font_size": 10,
+  "line_width": 1.8,
+  "colorblind_safe": true,
+  "print_friendly": true,
+  "formats": ["png"]
+}
+

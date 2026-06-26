@@ -42,13 +42,20 @@ def test_readme_documents_portable_skill_usage():
         "并行 Agent",
         "workflow_runner.py",
         "pipeline_check.py",
+        "quality-mode",
         "doctor.py",
         "evidence_checker.py",
         "validation_summary.json",
+        "model_spec.json",
+        "data_schema.json",
+        "schema_checker.py",
+        "figure_auditor.py",
+        "solution_tests.py",
         "MATLAB",
         "python -m pytest tests -q",
         "references/workflow.md",
         "examples/quickstart",
+        "examples/solved-python",
         "正式版",
     ]
     for phrase in required_phrases:
@@ -92,3 +99,26 @@ def test_public_quickstart_example_exists():
     example_readme = read_text("examples/quickstart/README.md")
     assert "input_parser.py brief" in example_readme
     assert "workflow_runner.py scaffold" in example_readme
+
+
+def test_public_solved_python_example_exists():
+    required = [
+        "examples/solved-python/problem.md",
+        "examples/solved-python/data.csv",
+        "examples/solved-python/problem_brief.md",
+        "examples/solved-python/model_spec.json",
+        "examples/solved-python/data_schema.json",
+        "examples/solved-python/symbol_table.json",
+        "examples/solved-python/solver_strategy.json",
+        "examples/solved-python/solution.py",
+        "examples/solved-python/solution_tests.py",
+        "examples/solved-python/results/validation_summary.json",
+        "examples/solved-python/figure_style.json",
+        "examples/solved-python/figure_storyboard.md",
+        "examples/solved-python/modeling_report.md",
+        "examples/solved-python/decision_insights.md",
+        "examples/solved-python/defense_questions.md",
+        "examples/solved-python/reproducibility_manifest.json",
+    ]
+    missing = [path for path in required if not (SKILL_DIR / path).exists()]
+    assert missing == []

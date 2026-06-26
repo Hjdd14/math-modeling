@@ -1,0 +1,55 @@
+{
+  "workspace": "examples\\solved-python",
+  "mode": "excellence",
+  "passed": true,
+  "warning": false,
+  "figures_audited": 1,
+  "checks": [
+    {
+      "name": "figure_style_present",
+      "passed": true,
+      "style": {
+        "dpi": 300,
+        "export_dpi": 600,
+        "font_family": "DejaVu Sans",
+        "font_size": 10,
+        "line_width": 1.8,
+        "colorblind_safe": true,
+        "print_friendly": true,
+        "formats": [
+          "png",
+          "pdf"
+        ]
+      }
+    },
+    {
+      "name": "figure_storyboard_present",
+      "passed": true
+    },
+    {
+      "name": "figures_present",
+      "passed": true,
+      "count": 1
+    },
+    {
+      "name": "all_figures_nonblank",
+      "passed": true
+    }
+  ],
+  "issues": [],
+  "figures": [
+    {
+      "file": "result_resource_usage.png",
+      "passed": true,
+      "quality_score": 100,
+      "width": 1800,
+      "height": 1200,
+      "dpi": [
+        300,
+        300
+      ],
+      "issues": [],
+      "storyboard_referenced": true
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "variables": [
+    {"name": "x_a", "type": "decision", "unit": "件", "bounds": [0, null]},
+    {"name": "x_b", "type": "decision", "unit": "件", "bounds": [0, null]}
+  ],
+  "objective": {"sense": "max", "expression": "40*x_a + 55*x_b"},
+  "constraints": [
+    {"name": "labor", "expression": "2*x_a + 3*x_b <= 120"},
+    {"name": "material", "expression": "3*x_a + 4*x_b <= 160"},
+    {"name": "carbon", "expression": "x_a + 2*x_b <= 70"}
+  ],
+  "parameters": [
+    {"name": "profit_A", "unit": "元/件", "value": 40},
+    {"name": "profit_B", "unit": "元/件", "value": 55}
+  ],
+  "data_fields": [
+    {"name": "profit", "dataset": "data.csv", "unit": "元/件"},
+    {"name": "labor", "dataset": "data.csv", "unit": "小时/件"}
+  ],
+  "solution_method": "complete enumeration over integer feasible region",
+  "validation_plan": {
+    "baseline": "single_best_ratio",
+    "oracle": "same enumeration verifies all feasible integer points",
+    "solver_cross_check": "closed-form resource residual check",
+    "sensitivity": "profit perturbation"
+  }
+}
+

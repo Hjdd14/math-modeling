@@ -40,6 +40,30 @@ def test_hard_problem_evals_cover_evidence_chain():
         assert "独立复现" in assertions
 
 
+def test_excellence_evals_cover_quality_chain():
+    path = os.path.join(SKILL_DIR, "evals", "evals.json")
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    quality_evals = [item for item in data["evals"] if item.get("category") == "excellence_delivery"]
+    assert len(quality_evals) >= 4
+    combined = "\n".join(
+        item["prompt"] + "\n" + "\n".join(item["assertions"])
+        for item in quality_evals
+    )
+    for keyword in [
+        "model_spec.json",
+        "data_schema.json",
+        "solution_tests.py",
+        "figure_auditor.py",
+        "figure_storyboard.md",
+        "report_auditor.py",
+        "reproducibility_manifest.json",
+        "defense_questions.md",
+    ]:
+        assert keyword in combined
+
+
 def test_trigger_eval_has_positive_and_negative_cases():
     path = os.path.join(SKILL_DIR, "evals", "trigger_eval.json")
     with open(path, "r", encoding="utf-8") as f:

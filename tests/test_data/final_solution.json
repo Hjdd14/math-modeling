@@ -1,0 +1,25 @@
+{
+  "selected_model": "linear_programming",
+  "problem_taxonomy": {"primary_types": ["optimization"], "secondary_types": ["linear_programming"]},
+  "score_matrix": [
+    {
+      "model_name": "linear_programming",
+      "problem_fit": 95,
+      "interpretability": 90,
+      "computability": 90,
+      "data_requirement": 80,
+      "robustness": 80,
+      "validation_difficulty": 30,
+      "paper_presentation": 85,
+      "decision": "selected"
+    }
+  ],
+  "validation_plan": {
+    "baseline_comparison": "simple feasible plan",
+    "oracle_tests": "manual corner check",
+    "solver_cross_checks": "linprog_vs_manual_corner_check",
+    "sensitivity_analysis": "profit plus minus 5 percent",
+    "invariants": ["nonnegative quantities", "capacity constraints"]
+  }
+}
+

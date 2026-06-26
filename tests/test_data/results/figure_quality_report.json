@@ -1,0 +1,56 @@
+{
+  "workspace": "tests\\test_data",
+  "mode": "standard",
+  "passed": true,
+  "warning": false,
+  "figures_audited": 1,
+  "checks": [
+    {
+      "name": "figure_style_present",
+      "passed": true,
+      "style": {
+        "dpi": 300,
+        "export_dpi": 600,
+        "font_family": "DejaVu Sans",
+        "font_size": 10,
+        "line_width": 1.8,
+        "colorblind_safe": true,
+        "print_friendly": true,
+        "formats": [
+          "png"
+        ]
+      }
+    },
+    {
+      "name": "figure_storyboard_present",
+      "passed": true
+    },
+    {
+      "name": "figures_present",
+      "passed": true,
+      "count": 1
+    },
+    {
+      "name": "all_figures_nonblank",
+      "passed": true
+    }
+  ],
+  "issues": [],
+  "figures": [
+    {
+      "file": "figure.png",
+      "passed": true,
+      "quality_score": 85.0,
+      "width": 100,
+      "height": 100,
+      "dpi": [
+        72,
+        72
+      ],
+      "issues": [
+        "DPI过低: 72（建议>=300）"
+      ],
+      "storyboard_referenced": true
+    }
+  ]
+}

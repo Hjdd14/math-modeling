@@ -1,0 +1,18 @@
+{
+  "best_solution": {
+    "x_a": 20,
+    "x_b": 25,
+    "profit": 2175
+  },
+  "objective": 2175,
+  "resource_usage": {
+    "labor": 115,
+    "material": 160,
+    "carbon": 70
+  },
+  "capacities": {
+    "labor": 120,
+    "material": 160,
+    "carbon": 70
+  }
+}

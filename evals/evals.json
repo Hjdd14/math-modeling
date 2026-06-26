@@ -75,6 +75,38 @@
       "expected_output": "完成非线性约束优化，包含初值敏感性、替代求解交叉验证、小规模枚举 oracle 和模型评分矩阵。",
       "files": ["facility_location.docx", "candidate_sites.xlsx"],
       "assertions": ["必须执行题意审计并记录隐藏约束", "必须保留 Phase 4 并行审查", "必须追加非线性求解动态专家 Agent", "必须生成 baseline_solution.json", "必须生成 results/validation_summary.json", "必须执行独立复现 Agent"]
+    },
+    {
+      "id": 11,
+      "category": "excellence_delivery",
+      "prompt": "请把这个多目标优化题做成一等奖级交付，要求报告、代码、图表、模型规范和数据契约全部可核查。",
+      "expected_output": "生成 model_spec.json、data_schema.json、symbol_table.json、solver_strategy.json、solution_tests.py 和严格验证结果。",
+      "files": ["problem.pdf", "data.xlsx"],
+      "assertions": ["必须保留并行 Agent", "必须执行 Phase 2/3 并行文档与代码", "必须生成 model_spec.json", "必须生成 data_schema.json", "必须生成 solution_tests.py", "必须运行 pipeline_check.py --quality-mode excellence"]
+    },
+    {
+      "id": 12,
+      "category": "excellence_delivery",
+      "prompt": "这个预测题附件字段复杂，请先检查数据契约和单位，再写模型和代码测试。",
+      "expected_output": "生成 data_schema.json、symbol_table.json、model_spec.json、solution_tests.py 与 validation_summary.json。",
+      "files": ["forecast.docx", "traffic.csv"],
+      "assertions": ["必须执行题意审计并保留并行 Agent", "必须保留五视角并行 Agent", "必须运行 schema_checker.py", "必须运行 unit_checker.py", "必须生成 model_spec.json", "必须生成 solution_tests.py"]
+    },
+    {
+      "id": 13,
+      "category": "excellence_delivery",
+      "prompt": "请让图表达到出版级水平，每张图都要服务正文论证，并检查报告是否像高分论文。",
+      "expected_output": "生成 figure_style.json、figure_storyboard.md、results/figure_quality_report.json 和 report_quality_report.json。",
+      "files": ["problem.md", "data.csv"],
+      "assertions": ["必须保留可视化设计 Agent 与并行审查 Agent", "必须生成 figure_auditor.py 对应的 figure_quality_report.json", "必须生成 figure_storyboard.md", "必须运行 report_auditor.py", "必须在报告正文引用图表"]
+    },
+    {
+      "id": 14,
+      "category": "excellence_delivery",
+      "prompt": "请模拟评委质询，给出可执行决策建议，并保证结果可复现。",
+      "expected_output": "生成 decision_insights.md、defense_questions.md、reproducibility_manifest.json，并通过质量模式检查。",
+      "files": ["problem.pdf", "data.xlsx"],
+      "assertions": ["必须执行评委质询 Agent 并保留 Phase 4 并行审查", "必须生成 defense_questions.md", "必须生成 reproducibility_manifest.json", "必须运行 manifest_checker.py", "必须运行 pipeline_check.py --quality-mode excellence"]
     }
   ]
 }

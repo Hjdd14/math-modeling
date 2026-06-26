@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "id": "A1",
+      "severity": "low",
+      "source": "problem.md",
+      "issue": "产量是否必须为整数",
+      "impact": "影响求解方法",
+      "resolution": "resolved",
+      "assumption_if_unresolved": "按整数产量处理"
+    }
+  ]
+}
+

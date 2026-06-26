@@ -1,0 +1,16 @@
+{
+  "datasets": [
+    {
+      "path": "data.csv",
+      "primary_key": ["product"],
+      "fields": [
+        {"name": "product", "type": "string", "required": true},
+        {"name": "profit", "type": "number", "unit": "元/件", "required": true, "min": 0},
+        {"name": "labor", "type": "number", "unit": "小时/件", "required": true, "min": 0},
+        {"name": "material", "type": "number", "unit": "kg/件", "required": true, "min": 0},
+        {"name": "carbon", "type": "number", "unit": "kgCO2/件", "required": true, "min": 0}
+      ]
+    }
+  ]
+}
+

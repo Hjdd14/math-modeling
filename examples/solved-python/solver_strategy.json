@@ -1,0 +1,8 @@
+{
+  "primary_solver": "enumeration",
+  "fallback_solvers": ["greedy_feasible"],
+  "timeout_seconds": 60,
+  "cross_validation": "resource residual and exhaustive oracle",
+  "failure_policy": "write failure mode and baseline result"
+}
+

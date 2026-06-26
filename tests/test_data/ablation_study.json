@@ -1,0 +1,6 @@
+{
+  "experiments": [
+    {"name": "without_resource_2", "changed_component": "resource_2", "metric_delta": 1500, "interpretation": "第二资源是关键约束", "passed": true}
+  ]
+}
+

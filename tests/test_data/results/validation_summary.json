@@ -3,22 +3,22 @@
     "baseline_name": "simple_feasible_plan",
     "metric": "profit",
     "baseline_value": 9000,
-    "model_value": 10500,
+    "model_value": 12000,
     "passed": true
   },
   "oracle_tests": [
     {
       "name": "two_product_manual_case",
-      "expected": 10500,
-      "actual": 10500,
+      "expected": 12000,
+      "actual": 12000,
       "passed": true
     }
   ],
   "solver_cross_checks": [
     {
       "name": "linprog_vs_manual_corner_check",
-      "primary": 10500,
-      "secondary": 10500,
+      "primary": 12000,
+      "secondary": 12000,
       "passed": true
     }
   ],
@@ -38,5 +38,33 @@
       "name": "missing_capacity_data",
       "mitigation": "stop with explicit error"
     }
-  ]
+  ],
+  "constraint_residuals": {
+    "max_abs": 0.0,
+    "passed": true
+  },
+  "optimality_gap": {
+    "value": 0.0,
+    "passed": true
+  },
+  "multi_start": {
+    "runs": 3,
+    "best_values": [12000, 12000, 12000],
+    "passed": true
+  },
+  "random_seed_stability": {
+    "seeds": [1, 2, 3],
+    "std": 0.0,
+    "passed": true
+  },
+  "bootstrap_confidence_interval": {
+    "level": 0.95,
+    "lower": 12000,
+    "upper": 12000,
+    "passed": true
+  },
+  "perturbation_stability": {
+    "ranking_changed": false,
+    "passed": true
+  }
 }

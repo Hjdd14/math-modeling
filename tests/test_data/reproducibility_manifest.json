@@ -1,0 +1,7 @@
+{
+  "python_version": "3.14",
+  "dependencies": {"scipy": ">=1.11", "numpy": ">=1.24"},
+  "random_seed": 42,
+  "input_hashes": [],
+  "output_hashes": []
+}

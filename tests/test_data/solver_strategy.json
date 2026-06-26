@@ -1,0 +1,8 @@
+{
+  "primary_solver": "scipy.optimize.linprog",
+  "fallback_solvers": ["manual_corner_check"],
+  "timeout_seconds": 60,
+  "cross_validation": "manual corner check",
+  "failure_policy": "report baseline and explicit solver failure"
+}
+

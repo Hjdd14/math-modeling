@@ -1,0 +1,12 @@
+{
+  "experiments": [
+    {
+      "name": "without_carbon_constraint",
+      "changed_component": "carbon constraint",
+      "metric_delta": 275,
+      "interpretation": "碳约束对最优利润有实际影响",
+      "passed": true
+    }
+  ]
+}
+

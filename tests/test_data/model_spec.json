@@ -1,0 +1,26 @@
+{
+  "variables": [
+    {"name": "x", "type": "decision", "unit": "件", "bounds": [0, null]},
+    {"name": "y", "type": "decision", "unit": "件", "bounds": [0, null]}
+  ],
+  "objective": {"sense": "max", "expression": "200*x + 300*y"},
+  "constraints": [
+    {"name": "resource_1", "expression": "2*x + y <= 80"},
+    {"name": "resource_2", "expression": "x + 3*y <= 90"}
+  ],
+  "parameters": [
+    {"name": "profit_A", "unit": "元/件", "value": 200},
+    {"name": "profit_B", "unit": "元/件", "value": 300}
+  ],
+  "data_fields": [
+    {"name": "温度", "dataset": "data.csv", "unit": "摄氏度"}
+  ],
+  "solution_method": "scipy.optimize.linprog",
+  "validation_plan": {
+    "baseline": "simple_feasible_plan",
+    "oracle": "manual corner check",
+    "solver_cross_check": "linprog_vs_manual_corner_check",
+    "sensitivity": "profit_plus_minus_5_percent"
+  }
+}
+

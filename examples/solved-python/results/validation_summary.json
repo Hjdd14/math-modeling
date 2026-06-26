@@ -1,0 +1,77 @@
+{
+  "baseline_comparison": {
+    "baseline_name": "single_best_ratio",
+    "baseline_value": 1600,
+    "model_value": 2175,
+    "passed": true
+  },
+  "oracle_tests": [
+    {
+      "name": "complete_integer_enumeration",
+      "expected": 2175,
+      "actual": 2175,
+      "passed": true
+    }
+  ],
+  "solver_cross_checks": [
+    {
+      "name": "resource_residual_check",
+      "primary": 2175,
+      "secondary": 2175,
+      "passed": true
+    }
+  ],
+  "sensitivity_analysis": {
+    "method": "profit_perturbation",
+    "max_relative_change": 0.04,
+    "passed": true
+  },
+  "invariants": [
+    {
+      "name": "all_constraints_satisfied",
+      "passed": true
+    }
+  ],
+  "failure_modes": [
+    {
+      "name": "missing_data",
+      "mitigation": "stop with explicit schema error"
+    }
+  ],
+  "constraint_residuals": {
+    "max_abs": 0,
+    "passed": true
+  },
+  "optimality_gap": {
+    "value": 0,
+    "passed": true
+  },
+  "multi_start": {
+    "runs": 3,
+    "best_values": [
+      2175,
+      2175,
+      2175
+    ],
+    "passed": true
+  },
+  "random_seed_stability": {
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "std": 0,
+    "passed": true
+  },
+  "bootstrap_confidence_interval": {
+    "level": 0.95,
+    "lower": 2175,
+    "upper": 2175,
+    "passed": true
+  },
+  "perturbation_stability": {
+    "ranking_changed": false,
+    "passed": true
+  }
+}

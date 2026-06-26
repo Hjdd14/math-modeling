@@ -1,0 +1,16 @@
+{
+  "datasets": [
+    {
+      "path": "data.csv",
+      "primary_key": ["时间"],
+      "fields": [
+        {"name": "时间", "type": "date", "required": true},
+        {"name": "温度", "type": "number", "unit": "摄氏度", "required": true},
+        {"name": "压力", "type": "number", "unit": "kPa", "required": true},
+        {"name": "流量", "type": "number", "unit": "m3/h", "required": true},
+        {"name": "液位", "type": "number", "unit": "m", "required": true}
+      ]
+    }
+  ]
+}
+

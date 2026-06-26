@@ -66,7 +66,7 @@ def check_figure(file_path: str) -> dict:
 
         dpi_info = img.info.get("dpi", (72, 72))
         if isinstance(dpi_info, tuple) and len(dpi_info) >= 2:
-            result["dpi"] = [int(dpi_info[0]), int(dpi_info[1])]
+            result["dpi"] = [int(round(dpi_info[0])), int(round(dpi_info[1]))]
         else:
             result["dpi"] = [72, 72]
 

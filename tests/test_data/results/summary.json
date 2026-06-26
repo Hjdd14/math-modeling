@@ -1,0 +1,6 @@
+{
+  "best_solution": {"x": 30, "y": 20},
+  "objective": 12000,
+  "resource_usage": {"workshop_a": 80, "workshop_b": 90},
+  "capacities": {"workshop_a": 80, "workshop_b": 90}
+}

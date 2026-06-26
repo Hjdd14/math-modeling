@@ -20,10 +20,21 @@ REQUIRED_FILES = [
     "references/tools.md",
     "tools/pipeline_check.py",
     "tools/evidence_checker.py",
+    "tools/schema_checker.py",
+    "tools/model_spec_checker.py",
+    "tools/unit_checker.py",
+    "tools/robustness_checker.py",
+    "tools/figure_auditor.py",
+    "tools/report_auditor.py",
+    "tools/manifest_checker.py",
+    "tools/solution_test_generator.py",
     "tools/workflow_runner.py",
     "tools/state_manager.py",
     "examples/quickstart/problem.md",
     "examples/quickstart/production_data.csv",
+    "examples/solved-python/problem.md",
+    "examples/solved-python/model_spec.json",
+    "examples/solved-python/results/validation_summary.json",
 ]
 
 RUNTIME_MODULES = {

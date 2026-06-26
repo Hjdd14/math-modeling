@@ -65,6 +65,104 @@
 }
 ```
 
+## scoring_strategy.md
+
+```markdown
+# 评分策略
+
+| 小问 | 必答结果 | 评分重点 | 需要图表 | 创新表达 |
+|------|----------|----------|----------|----------|
+| 问题一 | 数值/排名/方案 | 模型合理性、结果可解释 | 是 | baseline 对比 |
+```
+
+## data_schema.json
+
+```json
+{
+  "datasets": [
+    {
+      "path": "data.csv",
+      "primary_key": ["id"],
+      "fields": [
+        {
+          "name": "value",
+          "type": "number",
+          "unit": "件",
+          "required": true,
+          "min": 0,
+          "max_missing_rate": 0.05
+        }
+      ]
+    }
+  ]
+}
+```
+
+## symbol_table.json
+
+```json
+{
+  "symbols": [
+    {
+      "symbol": "x_i",
+      "meaning": "第 i 类产品产量",
+      "unit": "件",
+      "code_name": "x_i"
+    }
+  ]
+}
+```
+
+## model_spec.json
+
+```json
+{
+  "variables": [
+    {"name": "x", "type": "decision", "unit": "件", "bounds": [0, null], "code_name": "x"}
+  ],
+  "objective": {"sense": "max", "expression": "profit * x"},
+  "constraints": [{"name": "capacity", "expression": "x <= capacity"}],
+  "parameters": [{"name": "profit", "unit": "元/件", "source": "data_schema.json"}],
+  "data_fields": [{"name": "value", "dataset": "data.csv", "unit": "件"}],
+  "solution_method": "enumeration / scipy / dynamic programming / simulation",
+  "validation_plan": {
+    "baseline": "baseline_solution.json",
+    "oracle": "small brute-force case",
+    "solver_cross_check": "alternate solver or enumeration",
+    "sensitivity": "one-at-a-time perturbation"
+  },
+  "figure_plan": ["baseline_vs_final", "sensitivity"]
+}
+```
+
+## solver_strategy.json
+
+```json
+{
+  "primary_solver": "scipy.optimize / enumeration / dynamic_programming",
+  "fallback_solvers": ["brute_force_small_case", "greedy_feasible"],
+  "timeout_seconds": 300,
+  "cross_validation": "small-scale enumeration",
+  "failure_policy": "write failure mode and fallback result instead of silently continuing"
+}
+```
+
+## ablation_study.json
+
+```json
+{
+  "experiments": [
+    {
+      "name": "without_capacity_constraint",
+      "changed_component": "capacity constraint",
+      "metric_delta": 0,
+      "interpretation": "说明该约束对结果的影响",
+      "passed": true
+    }
+  ]
+}
+```
+
 ## final_solution.json 关键字段
 
 ```json
@@ -162,7 +260,125 @@
       "name": "missing_or_invalid_input",
       "mitigation": "stop with explicit error"
     }
-  ]
+  ],
+  "constraint_residuals": {
+    "max_abs": 0,
+    "passed": true
+  },
+  "optimality_gap": {
+    "value": 0,
+    "passed": true
+  },
+  "multi_start": {
+    "runs": 5,
+    "best_values": [0, 0, 0],
+    "passed": true
+  },
+  "random_seed_stability": {
+    "seeds": [1, 2, 3],
+    "std": 0,
+    "passed": true
+  },
+  "bootstrap_confidence_interval": {
+    "level": 0.95,
+    "lower": 0,
+    "upper": 0,
+    "passed": true
+  },
+  "perturbation_stability": {
+    "ranking_changed": false,
+    "passed": true
+  }
+}
+```
+
+## solution_tests.py
+
+```python
+"""代码 Agent 先生成的契约测试。"""
+
+import json
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent
+
+
+def test_required_outputs_exist():
+    for path in ["results/output.csv", "results/summary.json", "results/validation_summary.json"]:
+        assert (ROOT / path).exists()
+
+
+def test_validation_summary_fields():
+    data = json.loads((ROOT / "results/validation_summary.json").read_text(encoding="utf-8"))
+    for key in [
+        "baseline_comparison",
+        "oracle_tests",
+        "solver_cross_checks",
+        "sensitivity_analysis",
+        "constraint_residuals",
+        "optimality_gap",
+    ]:
+        assert key in data
+```
+
+## figure_style.json
+
+```json
+{
+  "dpi": 300,
+  "export_dpi": 600,
+  "font_family": "DejaVu Sans",
+  "font_size": 10,
+  "line_width": 1.8,
+  "colorblind_safe": true,
+  "print_friendly": true,
+  "formats": ["png", "pdf", "svg"]
+}
+```
+
+## figure_storyboard.md
+
+```markdown
+# Figure Storyboard
+
+| 图表 | 回答的问题 | 数据来源 | 预期结论 | 报告位置 |
+|------|------------|----------|----------|----------|
+| result_baseline_vs_final.png | 完整模型是否优于 baseline | results/output.csv | 完整模型提升明显 | 模型求解 |
+```
+
+## decision_insights.md
+
+```markdown
+# 决策建议
+
+- 关键结论：
+- 工程/管理含义：
+- 风险提示：
+- 可执行策略：
+- 不同情景建议：
+```
+
+## defense_questions.md
+
+```markdown
+# 评委质询模拟
+
+| 问题 | 风险 | 回答要点 | 是否需要修正 |
+|------|------|----------|--------------|
+| 为什么选择该模型？ | 模型选择依据不足 | 引用 score_matrix 与消融实验 | 否 |
+```
+
+## reproducibility_manifest.json
+
+```json
+{
+  "python_version": "3.x",
+  "matlab_version": null,
+  "dependencies": {"numpy": "version", "pandas": "version"},
+  "random_seed": 42,
+  "input_hashes": [{"path": "data.csv", "sha256": "..."}],
+  "output_hashes": [{"path": "results/output.csv", "sha256": "..."}]
 }
 ```
 
@@ -237,6 +453,17 @@ def write_validation_summary():
         "failure_modes": [
             {"name": "missing_or_invalid_input", "mitigation": "stop with explicit error"}
         ],
+        "constraint_residuals": {"max_abs": 0.0, "passed": True},
+        "optimality_gap": {"value": 0.0, "passed": True},
+        "multi_start": {"runs": 1, "best_values": [0.0], "passed": True},
+        "random_seed_stability": {"seeds": [42], "std": 0.0, "passed": True},
+        "bootstrap_confidence_interval": {
+            "level": 0.95,
+            "lower": 0.0,
+            "upper": 0.0,
+            "passed": True,
+        },
+        "perturbation_stability": {"ranking_changed": False, "passed": True},
     }
     (RESULTS_DIR / "validation_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2),
@@ -306,6 +533,12 @@ validation.solver_cross_checks = struct("name", "primary_vs_enumeration", "prima
 validation.sensitivity_analysis = run_sensitivity_analysis();
 validation.invariants = struct("name", "constraints_satisfied", "passed", true);
 validation.failure_modes = struct("name", "missing_or_invalid_input", "mitigation", "stop with explicit error");
+validation.constraint_residuals = struct("max_abs", 0, "passed", true);
+validation.optimality_gap = struct("value", 0, "passed", true);
+validation.multi_start = struct("runs", 1, "best_values", 0, "passed", true);
+validation.random_seed_stability = struct("seeds", 42, "std", 0, "passed", true);
+validation.bootstrap_confidence_interval = struct("level", 0.95, "lower", 0, "upper", 0, "passed", true);
+validation.perturbation_stability = struct("ranking_changed", false, "passed", true);
 fid = fopen(fullfile(resultsDir, "validation_summary.json"), "w");
 fprintf(fid, "%s", jsonencode(validation));
 fclose(fid);

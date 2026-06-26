@@ -20,6 +20,8 @@
 - [ ] Phase 2 才生成正式 `modeling_report.md`。
 - [ ] Phase 1、Phase 2/3、Phase 4 的并行 Agent gate 没有被 CLI 降级或替代。
 - [ ] Phase 0 题意审计、Phase 1 baseline/动态专家、Phase 3 `validation_summary.json`、Phase 4 独立复现和 evidence check 均已记录。
+- [ ] 1.2.0 卓越交付产物已记录：`model_spec.json`、`data_schema.json`、`symbol_table.json`、`solver_strategy.json`、`solution_tests.py`、`figure_style.json`、`figure_storyboard.md`、`report_quality_report.json`、`defense_questions.md` 和 `reproducibility_manifest.json`。
+- [ ] 问题拆解与评分策略 Agent、可视化设计 Agent、竞赛论文表现力 Agent、结果解释 Agent 和评委质询 Agent 没有被工具脚本替代。
 - [ ] MATLAB 支持等级、模板、夹具和测试说明完整。
 
 ## 工具验证
@@ -31,6 +33,7 @@ python -m pytest tests -q
 python tests/run_all_tests.py
 python tools/pipeline_check.py --workspace tests/test_data --language python
 python tools/pipeline_check.py --workspace tests/test_data --language python --evidence-mode strict
+python tools/pipeline_check.py --workspace tests/test_data --language python --evidence-mode strict --quality-mode excellence
 python tools/workflow_runner.py resume --workspace tests/test_data --language python
 ```
 
@@ -49,6 +52,7 @@ $env:RUN_MATLAB_TESTS = "1"; python -m pytest tests/test_matlab_support.py -q
 - [ ] 不上传含真实个人信息、未公开竞赛资料或商业数据的附件。
 - [ ] 若包含示例，确保示例为合成数据或已获许可数据。
 - [ ] `examples/quickstart/` 可生成 `problem_brief.md`。
+- [ ] `examples/solved-python/` 不包含真实竞赛或个人数据，并能作为理想产物结构参考。
 
 ## 版本标记
 

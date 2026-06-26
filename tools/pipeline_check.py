@@ -12,15 +12,29 @@ try:
     from tools.code_runner import run_code
     from tools.consistency_checker import check_formula_consistency
     from tools.evidence_checker import check_evidence
+    from tools.figure_auditor import audit_figures
     from tools.figure_checker import batch_check
     from tools.latex_validator import validate_latex_file
+    from tools.manifest_checker import check_manifest
+    from tools.model_spec_checker import check_model_spec
+    from tools.report_auditor import audit_report
+    from tools.robustness_checker import check_robustness
+    from tools.schema_checker import check_schema
+    from tools.unit_checker import check_units
 except ImportError:
     from brief_validator import validate_against_brief
     from code_runner import run_code
     from consistency_checker import check_formula_consistency
     from evidence_checker import check_evidence
+    from figure_auditor import audit_figures
     from figure_checker import batch_check
     from latex_validator import validate_latex_file
+    from manifest_checker import check_manifest
+    from model_spec_checker import check_model_spec
+    from report_auditor import audit_report
+    from robustness_checker import check_robustness
+    from schema_checker import check_schema
+    from unit_checker import check_units
 
 
 def output(result: dict):
@@ -40,7 +54,13 @@ def _safe(name: str, checks: dict, func):
     return checks[name]
 
 
-def run_checks(workspace: str, language: str = "python", timeout: int = 300, evidence_mode: str = "standard") -> dict:
+def run_checks(
+    workspace: str,
+    language: str = "python",
+    timeout: int = 300,
+    evidence_mode: str = "standard",
+    quality_mode: str = "standard",
+) -> dict:
     root = Path(workspace)
     brief = root / "problem_brief.md"
     report = root / "modeling_report.md"
@@ -84,6 +104,13 @@ def run_checks(workspace: str, language: str = "python", timeout: int = 300, evi
         _safe("brief_output", checks, lambda: validate_against_brief(str(brief), "output", str(results_dir)))
 
     _safe("evidence_checker", checks, lambda: check_evidence(str(root), evidence_mode))
+    _safe("schema_checker", checks, lambda: check_schema(str(root), quality_mode))
+    _safe("model_spec_checker", checks, lambda: check_model_spec(str(root), quality_mode))
+    _safe("unit_checker", checks, lambda: check_units(str(root), quality_mode))
+    _safe("robustness_checker", checks, lambda: check_robustness(str(root), quality_mode))
+    _safe("figure_auditor", checks, lambda: audit_figures(str(root), quality_mode))
+    _safe("report_auditor", checks, lambda: audit_report(str(root), quality_mode))
+    _safe("manifest_checker", checks, lambda: check_manifest(str(root), quality_mode))
 
     passed = checks["required_files"]["passed"]
     for name, result in checks.items():
@@ -98,6 +125,7 @@ def run_checks(workspace: str, language: str = "python", timeout: int = 300, evi
         "workspace": str(root),
         "language": language,
         "evidence_mode": evidence_mode,
+        "quality_mode": quality_mode,
         "passed": passed,
         "checks": checks,
     }
@@ -114,10 +142,16 @@ def main():
         choices=["standard", "strict", "hard", "complete", "full"],
         help="standard 兼容旧工作区；strict/hard/complete/full 缺证据即失败",
     )
+    parser.add_argument(
+        "--quality-mode",
+        default="standard",
+        choices=["standard", "strict", "hard", "complete", "full", "excellence"],
+        help="standard 兼容旧工作区；strict/excellence 要求 1.2.0 质量闭环产物完整",
+    )
     args = parser.parse_args()
 
     try:
-        result = run_checks(args.workspace, args.language, args.timeout, args.evidence_mode)
+        result = run_checks(args.workspace, args.language, args.timeout, args.evidence_mode, args.quality_mode)
         output(result)
         sys.exit(0 if result["passed"] else 1)
     except Exception as exc:
