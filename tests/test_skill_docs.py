@@ -81,6 +81,41 @@ def test_parallel_agents_are_preserved_as_phase_gates():
         assert term in combined
 
 
+def test_hard_problem_evidence_gates_are_documented():
+    """测试：难题准确性增强 gate 必须写入主入口和工作流"""
+    content = read_skill_doc()
+    workflow_path = os.path.join(SKILL_DIR, "references", "workflow.md")
+    with open(workflow_path, "r", encoding="utf-8") as f:
+        workflow = f.read()
+    combined = content + "\n" + workflow
+
+    required_terms = [
+        "ambiguity_register.json",
+        "assumption_ledger.md",
+        "题意审计 Agent",
+        "problem_taxonomy",
+        "动态专家 Agent",
+        "baseline_solution.json",
+        "模型评分矩阵",
+        "validation_summary.json",
+        "独立复现 Agent",
+        "evidence_checker.py",
+    ]
+    for term in required_terms:
+        assert term in combined
+
+
+def test_dynamic_experts_are_additive_not_replacements():
+    """测试：动态专家只能追加，不能替换五视角 Agent"""
+    workflow_path = os.path.join(SKILL_DIR, "references", "workflow.md")
+    with open(workflow_path, "r", encoding="utf-8") as f:
+        workflow = f.read()
+
+    assert "保留原五视角" in workflow
+    assert "最多追加 3 个动态专家 Agent" in workflow
+    assert "不能替换" in workflow
+
+
 def test_phase1_outputs_decision_files_not_modeling_report():
     """测试：Phase 1 只输出决策产物，报告由 Phase 2 生成"""
     workflow_path = os.path.join(SKILL_DIR, "references", "workflow.md")

@@ -11,12 +11,14 @@ try:
     from tools.brief_validator import validate_against_brief
     from tools.code_runner import run_code
     from tools.consistency_checker import check_formula_consistency
+    from tools.evidence_checker import check_evidence
     from tools.figure_checker import batch_check
     from tools.latex_validator import validate_latex_file
 except ImportError:
     from brief_validator import validate_against_brief
     from code_runner import run_code
     from consistency_checker import check_formula_consistency
+    from evidence_checker import check_evidence
     from figure_checker import batch_check
     from latex_validator import validate_latex_file
 
@@ -38,7 +40,7 @@ def _safe(name: str, checks: dict, func):
     return checks[name]
 
 
-def run_checks(workspace: str, language: str = "python", timeout: int = 300) -> dict:
+def run_checks(workspace: str, language: str = "python", timeout: int = 300, evidence_mode: str = "standard") -> dict:
     root = Path(workspace)
     brief = root / "problem_brief.md"
     report = root / "modeling_report.md"
@@ -81,6 +83,8 @@ def run_checks(workspace: str, language: str = "python", timeout: int = 300) -> 
     if brief.exists() and results_dir.exists():
         _safe("brief_output", checks, lambda: validate_against_brief(str(brief), "output", str(results_dir)))
 
+    _safe("evidence_checker", checks, lambda: check_evidence(str(root), evidence_mode))
+
     passed = checks["required_files"]["passed"]
     for name, result in checks.items():
         if name == "required_files":
@@ -93,6 +97,7 @@ def run_checks(workspace: str, language: str = "python", timeout: int = 300) -> 
     return {
         "workspace": str(root),
         "language": language,
+        "evidence_mode": evidence_mode,
         "passed": passed,
         "checks": checks,
     }
@@ -103,10 +108,16 @@ def main():
     parser.add_argument("--workspace", required=True, help="建模工作区")
     parser.add_argument("--language", default="python", choices=["python", "matlab"])
     parser.add_argument("--timeout", type=int, default=300)
+    parser.add_argument(
+        "--evidence-mode",
+        default="standard",
+        choices=["standard", "strict", "hard", "complete", "full"],
+        help="standard 兼容旧工作区；strict/hard/complete/full 缺证据即失败",
+    )
     args = parser.parse_args()
 
     try:
-        result = run_checks(args.workspace, args.language, args.timeout)
+        result = run_checks(args.workspace, args.language, args.timeout, args.evidence_mode)
         output(result)
         sys.exit(0 if result["passed"] else 1)
     except Exception as exc:

@@ -19,6 +19,7 @@
 - [ ] Phase 1 只生成 `final_solution.json` 和 `model_decision.md`。
 - [ ] Phase 2 才生成正式 `modeling_report.md`。
 - [ ] Phase 1、Phase 2/3、Phase 4 的并行 Agent gate 没有被 CLI 降级或替代。
+- [ ] Phase 0 题意审计、Phase 1 baseline/动态专家、Phase 3 `validation_summary.json`、Phase 4 独立复现和 evidence check 均已记录。
 - [ ] MATLAB 支持等级、模板、夹具和测试说明完整。
 
 ## 工具验证
@@ -29,6 +30,7 @@ python -m compileall tools
 python -m pytest tests -q
 python tests/run_all_tests.py
 python tools/pipeline_check.py --workspace tests/test_data --language python
+python tools/pipeline_check.py --workspace tests/test_data --language python --evidence-mode strict
 python tools/workflow_runner.py resume --workspace tests/test_data --language python
 ```
 

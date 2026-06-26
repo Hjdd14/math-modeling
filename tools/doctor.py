@@ -19,6 +19,7 @@ REQUIRED_FILES = [
     "references/workflow.md",
     "references/tools.md",
     "tools/pipeline_check.py",
+    "tools/evidence_checker.py",
     "tools/workflow_runner.py",
     "tools/state_manager.py",
     "examples/quickstart/problem.md",

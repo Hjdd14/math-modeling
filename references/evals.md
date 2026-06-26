@@ -8,6 +8,7 @@
 - `modeling_state.json` 是否记录工具和 Agent 运行摘要。
 - `results/` 是否包含结构化结果和图表。
 - 并行 Agent phase gate 是否在输出中被执行或明确记录。
+- 难题场景是否包含题意审计、baseline、动态专家、`validation_summary.json`、oracle/小例验证、敏感性分析和独立复现摘要。
 
 ## Claude 实跑 eval
 

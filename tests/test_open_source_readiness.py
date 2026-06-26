@@ -43,6 +43,8 @@ def test_readme_documents_portable_skill_usage():
         "workflow_runner.py",
         "pipeline_check.py",
         "doctor.py",
+        "evidence_checker.py",
+        "validation_summary.json",
         "MATLAB",
         "python -m pytest tests -q",
         "references/workflow.md",

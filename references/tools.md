@@ -76,6 +76,30 @@ python "tools/consistency_checker.py" formula --doc "modeling_report.md" --code 
 - `consistency_score`：基于文档公式符号与代码数学表达式符号的启发式分数。
 - `mismatches`：包括文档独有符号、代码独有符号和数字常量差异。
 
+## evidence_checker.py
+
+```bash
+python "tools/evidence_checker.py" --workspace "." --mode standard
+python "tools/evidence_checker.py" --workspace "." --mode strict
+```
+
+检查 `results/validation_summary.json` 的证据结构和显式通过状态。该工具只检查证据是否存在、结构是否合格、关键状态是否通过，不替代建模推理，也不证明数学结论正确。
+
+关键字段：
+
+- `exists`：是否找到 `results/validation_summary.json`。
+- `passed`：机器可读总判定。
+- `warning`：标准模式下缺少新证据或新字段时为 true。
+- `checks`：逐项检查 baseline、oracle、solver 交叉验证、敏感性、不变量和失败模式。
+- `evidence_items`：轻量证据名称摘要，便于 reviewer 和 CI 定位。
+- `issues`：warning/error 列表。
+
+失败判定：
+
+- `--mode standard`：旧工作区缺少 `validation_summary.json` 或新增证据项时给 warning，不直接失败。
+- `--mode strict`：难题或完整交付模式；缺少 baseline、oracle、solver 交叉验证、敏感性、不变量或失败模式即失败。
+- 如果证据文件存在但 JSON 无效，或任一证据项显式 `passed=false` / `status=failed`，所有模式都失败。
+
 ## brief_validator.py
 
 ```bash
@@ -91,9 +115,10 @@ python "tools/brief_validator.py" validate --brief "problem_brief.md" --stage ou
 
 ```bash
 python "tools/pipeline_check.py" --workspace "." --language python
+python "tools/pipeline_check.py" --workspace "." --language python --evidence-mode strict
 ```
 
-总控验证会串联 LaTeX、代码运行、图表、公式一致性和 brief 核查。`passed == false` 时必须修正后重跑。
+总控验证会串联 LaTeX、代码运行、图表、公式一致性、brief 核查和 evidence check。`passed == false` 时必须修正后重跑。默认 `--evidence-mode standard` 向后兼容旧工作区；难题、完整交付或正式竞赛结果使用 `--evidence-mode strict`。
 
 ## workflow_runner.py
 

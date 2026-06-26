@@ -20,6 +20,26 @@ def test_task_evals_schema():
         assert any("并行" in assertion for assertion in item["assertions"])
 
 
+def test_hard_problem_evals_cover_evidence_chain():
+    path = os.path.join(SKILL_DIR, "evals", "evals.json")
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    hard_evals = [item for item in data["evals"] if item.get("category") == "hard_problem"]
+    assert len(hard_evals) >= 5
+    prompts = "\n".join(item["prompt"] for item in hard_evals)
+    for keyword in ["多目标", "缺失数据", "图", "随机", "非线性"]:
+        assert keyword in prompts
+
+    for item in hard_evals:
+        assertions = "\n".join(item["assertions"])
+        assert "题意审计" in assertions
+        assert "baseline" in assertions
+        assert "动态专家" in assertions
+        assert "validation_summary.json" in assertions
+        assert "独立复现" in assertions
+
+
 def test_trigger_eval_has_positive_and_negative_cases():
     path = os.path.join(SKILL_DIR, "evals", "trigger_eval.json")
     with open(path, "r", encoding="utf-8") as f:

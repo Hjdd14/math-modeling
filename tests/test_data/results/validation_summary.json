@@ -1,0 +1,42 @@
+{
+  "baseline_comparison": {
+    "baseline_name": "simple_feasible_plan",
+    "metric": "profit",
+    "baseline_value": 9000,
+    "model_value": 10500,
+    "passed": true
+  },
+  "oracle_tests": [
+    {
+      "name": "two_product_manual_case",
+      "expected": 10500,
+      "actual": 10500,
+      "passed": true
+    }
+  ],
+  "solver_cross_checks": [
+    {
+      "name": "linprog_vs_manual_corner_check",
+      "primary": 10500,
+      "secondary": 10500,
+      "passed": true
+    }
+  ],
+  "sensitivity_analysis": {
+    "method": "profit_plus_minus_5_percent",
+    "max_relative_change": 0.05,
+    "passed": true
+  },
+  "invariants": [
+    {
+      "name": "nonnegative_quantity",
+      "passed": true
+    }
+  ],
+  "failure_modes": [
+    {
+      "name": "missing_capacity_data",
+      "mitigation": "stop with explicit error"
+    }
+  ]
+}

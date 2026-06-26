@@ -1,6 +1,6 @@
 ---
 name: math-modeling
-description: 用于数学建模竞赛或类似多阶段建模任务。触发条件：用户提供题目 PDF/DOCX/Markdown/TXT 与 Excel/CSV 附件，并要求完成建模分析、报告、Python 或 MATLAB 代码、图表和结果验证。不要用于普通单题解答、单纯表格清洗、PDF 翻译或只写一段代码的任务。执行时必须保留并行子 Agent：Phase 1 五视角建模共识，Phase 2/3 文档 Agent 与代码 Agent 并行，Phase 4 三类审查 Agent 并行。
+description: 用于数学建模竞赛或类似多阶段建模任务。触发条件：用户提供题目 PDF/DOCX/Markdown/TXT 与 Excel/CSV 附件，并要求完成建模分析、报告、Python 或 MATLAB 代码、图表、结果验证或难题可信度审查。不要用于普通单题解答、单纯表格清洗、PDF 翻译或只写一段代码的任务。执行时必须保留并行子 Agent：Phase 1 五视角建模共识，Phase 2/3 文档 Agent 与代码 Agent 并行，Phase 4 三类审查 Agent 并行。
 ---
 
 # 数学建模竞赛全流程 Skill
@@ -30,6 +30,9 @@ description: 用于数学建模竞赛或类似多阶段建模任务。触发条�
 8. 每个阶段都更新 `modeling_state.json` 和 `modeling_memory.md`。
 9. 工具调用必须在对应 step 直接执行，不得跳过。
 10. 验证失败时回溯到对应阶段修正，而不是在后续阶段打补丁。
+11. 难题必须保留可证伪证据链：题意审计、baseline、oracle 或等价小例验证、solver 交叉验证、敏感性分析和独立复现记录。
+12. 未解决的 high severity 歧义必须写入 `modeling_memory.md`，不能静默进入 Phase 1。
+13. 难题或完整验证必须使用 `pipeline_check.py --evidence-mode strict`。
 
 ## 固定产物
 
@@ -38,13 +41,17 @@ description: 用于数学建模竞赛或类似多阶段建模任务。触发条�
 | 产物 | 阶段 | 说明 |
 |------|------|------|
 | `problem_brief.md` | Phase 0 | 题目、目标、约束、附件摘要 |
+| `ambiguity_register.json` | Phase 0 | 题意歧义、单位、隐藏约束和评分要求审计 |
+| `assumption_ledger.md` | Phase 0+ | 假设来源、影响和验证状态 |
 | `modeling_state.json` | 全程 | 机器可读状态 |
 | `modeling_memory.md` | 全程 | 人类可读过程记忆 |
+| `baseline_solution.json` | Phase 1 | 简单、可运行、可解释的基线模型 |
 | `final_solution.json` | Phase 1 | 最终建模方案 |
 | `model_decision.md` | Phase 1 | 共识过程和裁决理由 |
 | `modeling_report.md` | Phase 2 | 正式建模报告 |
 | `solution.py` 或 `solution.m` | Phase 3 | 可运行代码 |
 | `results/` | Phase 3+ | CSV/JSON/PNG 等输出 |
+| `results/validation_summary.json` | Phase 3+ | baseline、oracle、交叉验证、敏感性和不变量证据 |
 
 ## 执行入口
 
@@ -72,11 +79,11 @@ python "tools/pipeline_check.py" --workspace "." --language python
 
 ### Phase 0: 题目与数据提取
 
-读取题目文件和附件，使用 `tools/input_parser.py` 与 `tools/data_analyzer.py` 生成 `problem_brief.md`。向用户确认题目目标、附件摘要和编程语言。确认后更新 `modeling_state.json` 与 `modeling_memory.md`。
+读取题目文件和附件，使用 `tools/input_parser.py` 与 `tools/data_analyzer.py` 生成 `problem_brief.md`。启动题意审计 Agent，生成 `ambiguity_register.json` 与 `assumption_ledger.md`。向用户确认题目目标、附件摘要、关键歧义和编程语言。确认后更新 `modeling_state.json` 与 `modeling_memory.md`。
 
 ### Phase 1: 并行建模共识
 
-必须执行五视角建模 Agent。流程是：五个 Agent 并行生成方案，随后并行批评，并行修正，最后由裁决 Agent 生成 `final_solution.json` 与 `model_decision.md`。本阶段不得写入 `modeling_report.md`。
+必须先判断 `problem_taxonomy`，再执行五视角建模 Agent。流程是：五个 Agent 并行生成方案，按题型最多追加 3 个动态专家 Agent，随后并行批评，并行修正，最后由裁决 Agent 生成 `baseline_solution.json`、`final_solution.json` 与 `model_decision.md`。本阶段不得写入 `modeling_report.md`。
 
 五视角建模 Agent 包括：
 
@@ -88,7 +95,7 @@ python "tools/pipeline_check.py" --workspace "." --language python
 
 ### Phase 2/3: 文档与代码并行
 
-文档 Agent 与代码 Agent 并行执行。文档 Agent 基于 `final_solution.json` 和 `problem_brief.md` 生成 `modeling_report.md`。代码 Agent 基于同样输入生成 `solution.py` 或 `solution.m`，并把所有结果写入 `results/`。
+文档 Agent 与代码 Agent 并行执行。文档 Agent 基于 `final_solution.json`、`baseline_solution.json` 和 `problem_brief.md` 生成 `modeling_report.md`。代码 Agent 基于同样输入生成 `solution.py` 或 `solution.m`，并把所有结果和 `results/validation_summary.json` 写入 `results/`。
 
 ### Phase 4: 并行审查与工具验证
 
@@ -98,7 +105,7 @@ python "tools/pipeline_check.py" --workspace "." --language python
 - 逻辑审查 Agent
 - 输出审查 Agent
 
-汇总问题后，依次运行 `code_runner.py`、`figure_checker.py`、`consistency_checker.py`、`brief_validator.py` 或直接运行 `pipeline_check.py`。任何失败都必须修正并重新验证。
+同时启动独立复现 Agent，只读 `problem_brief.md`、`final_solution.json` 和代码输出，独立复算核心结论，不参考报告措辞。汇总问题后，依次运行 `code_runner.py`、`figure_checker.py`、`consistency_checker.py`、`brief_validator.py`、`evidence_checker.py` 或直接运行 `pipeline_check.py`。任何失败都必须修正并重新验证。
 
 ### Phase 5: 最终交付
 

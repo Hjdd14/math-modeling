@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 规划为 `1.1.0`：新增难题准确性增强链路，包括题意审计、假设台账、题型分类、动态专家 Agent、baseline、模型评分矩阵、`validation_summary.json` 和独立复现 gate。
+- 新增 `tools/evidence_checker.py`，并在 `pipeline_check.py` 中集成 `--evidence-mode standard|strict`；普通旧工作区缺证据给 warning，难题/完整模式缺证据失败。
+- Python 与 MATLAB 模板补齐 `run_baseline()`、`run_known_case_tests()`、`run_sensitivity_analysis()` 和 `write_validation_summary()` / 等价 JSON 输出。
+- eval 覆盖多目标优化、缺失数据预测、图路径规划、随机仿真和非线性约束等难题场景。
 - 新增 `tools/doctor.py`，用于本地依赖、仓库结构、可选工具和 quickstart 示例体检。
 - 新增 `examples/quickstart/` 合成公开样例，帮助新用户先跑通题目解析和状态恢复。
 - 修正 README 中 `input_parser.py` 的错误 quickstart 命令。

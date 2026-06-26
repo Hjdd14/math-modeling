@@ -26,6 +26,11 @@ def test_matlab_template_and_fixture_use_results_dir():
     assert "results" in template_content
     assert "results" in fixture_content
     assert "writetable" in fixture_content or "writecell" in fixture_content
+    assert "validation_summary.json" in template_content
+    assert "validation_summary.json" in fixture_content
+    assert "run_baseline" in template_content
+    assert "run_known_case_tests" in template_content
+    assert "run_sensitivity_analysis" in template_content
 
 
 def test_matlab_fixture_optional_runtime(tmp_path):

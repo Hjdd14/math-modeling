@@ -35,6 +35,46 @@
       "expected_output": "使用五视角建模共识，输出 final_solution.json 和 model_decision.md。",
       "files": ["problem.md", "data.xlsx"],
       "assertions": ["必须并行生成方案", "必须并行批评", "必须并行修正"]
+    },
+    {
+      "id": 6,
+      "category": "hard_problem",
+      "prompt": "多目标生产调度题：需要同时最大化利润、最小化碳排和延期惩罚，附件里有工序时长、设备容量、订单优先级和碳系数。请完整建模并给 Python 解答。",
+      "expected_output": "完成多目标优化建模，输出 baseline、模型评分矩阵、validation_summary.json 和独立复现摘要。",
+      "files": ["multi_objective_schedule.pdf", "orders.xlsx"],
+      "assertions": ["必须执行题意审计并记录 ambiguity_register.json", "必须保留五视角并行 Agent 且动态专家 Agent 只能追加", "必须生成 baseline_solution.json", "必须生成 results/validation_summary.json", "必须执行独立复现 Agent"]
+    },
+    {
+      "id": 7,
+      "category": "hard_problem",
+      "prompt": "缺失数据预测题：给出城市小时级客流 CSV，存在缺测、节假日字段和异常尖峰。需要预测未来 72 小时并解释误差来源。",
+      "expected_output": "完成缺失数据预测模型，至少包含 naive baseline、holdout 指标、异常/缺失处理和敏感性分析。",
+      "files": ["traffic.docx", "passenger_flow.csv"],
+      "assertions": ["必须执行题意审计并确认缺失字段含义", "必须保留文档 Agent 与代码 Agent 并行", "必须追加预测动态专家 Agent", "必须生成 baseline_solution.json", "必须生成 results/validation_summary.json", "必须执行独立复现 Agent"]
+    },
+    {
+      "id": 8,
+      "category": "hard_problem",
+      "prompt": "图路径规划题：无人车需要在带禁行边、时间窗和充电点的道路网络中完成配送，附件是节点边表和需求表。",
+      "expected_output": "完成图论/路径规划模型，包含小图 oracle、可行性不变量和 solver 交叉验证。",
+      "files": ["routing_problem.md", "nodes.csv", "edges.csv", "demand.csv"],
+      "assertions": ["必须执行题意审计并检查节点边字段", "必须保留五视角并行 Agent", "必须追加图路径动态专家 Agent", "必须生成 baseline_solution.json", "必须生成 results/validation_summary.json", "必须执行独立复现 Agent"]
+    },
+    {
+      "id": 9,
+      "category": "hard_problem",
+      "prompt": "随机仿真题：服务中心有随机到达、优先级排队和有限窗口，要求估计平均等待时间、超时概率和窗口配置方案。",
+      "expected_output": "完成排队/随机仿真模型，包含固定随机种子、置信区间、baseline 策略和敏感性分析。",
+      "files": ["queue_simulation.pdf", "arrival_log.xlsx"],
+      "assertions": ["必须执行题意审计并检查分布假设", "必须保留并行批评和并行修正", "必须追加随机仿真动态专家 Agent", "必须生成 baseline_solution.json", "必须生成 results/validation_summary.json", "必须执行独立复现 Agent"]
+    },
+    {
+      "id": 10,
+      "category": "hard_problem",
+      "prompt": "非线性约束选址题：需要在预算、覆盖半径、服务水平和非线性拥堵成本约束下选择设施位置，并说明解是否稳定。",
+      "expected_output": "完成非线性约束优化，包含初值敏感性、替代求解交叉验证、小规模枚举 oracle 和模型评分矩阵。",
+      "files": ["facility_location.docx", "candidate_sites.xlsx"],
+      "assertions": ["必须执行题意审计并记录隐藏约束", "必须保留 Phase 4 并行审查", "必须追加非线性求解动态专家 Agent", "必须生成 baseline_solution.json", "必须生成 results/validation_summary.json", "必须执行独立复现 Agent"]
     }
   ]
 }

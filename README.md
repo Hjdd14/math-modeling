@@ -7,9 +7,10 @@
 ## 能力
 
 - Phase 0：从 PDF/DOCX/Markdown/TXT 和表格附件生成 `problem_brief.md`。
-- Phase 1：五个建模 Agent 并行出方案，再并行批评、并行修正，最后裁决生成 `final_solution.json` 和 `model_decision.md`。
-- Phase 2/3：文档 Agent 与代码 Agent 并行工作，生成 `modeling_report.md` 与 `solution.py` 或 `solution.m`。
-- Phase 4：语法审查、逻辑审查、输出审查三个 Agent 并行，再运行工具链验证。
+- Phase 0：题意审计 Agent 生成 `ambiguity_register.json` 与 `assumption_ledger.md`，先暴露歧义、单位和隐藏约束。
+- Phase 1：五个建模 Agent 并行出方案，按题型最多追加 3 个动态专家 Agent，再并行批评、并行修正，最后裁决生成 `baseline_solution.json`、`final_solution.json` 和 `model_decision.md`。
+- Phase 2/3：文档 Agent 与代码 Agent 并行工作，生成 `modeling_report.md` 与 `solution.py` 或 `solution.m`；代码必须写出 `results/validation_summary.json`。
+- Phase 4：语法审查、逻辑审查、输出审查三个 Agent 并行，同时执行独立复现 Agent，再运行工具链和 `evidence_checker.py` 验证。
 - Phase 5：更新 `modeling_state.json` 和 `modeling_memory.md`，支持中断恢复。
 - MATLAB 是正式支持分支；默认测试会做静态检查，检测到本机 MATLAB 并设置 `RUN_MATLAB_TESTS=1` 后可实跑。
 
@@ -57,6 +58,12 @@ python tools/workflow_runner.py resume --workspace runs/my_case --language pytho
 python tools/pipeline_check.py --workspace runs/my_case --language python
 ```
 
+难题或正式交付使用严格证据模式：
+
+```powershell
+python tools/pipeline_check.py --workspace runs/my_case --language python --evidence-mode strict
+```
+
 完整测试：
 
 ```powershell
@@ -82,23 +89,28 @@ python tools/workflow_runner.py resume --workspace runs/quickstart --language py
 3. 并行 Agent 步骤必须真实执行或明确记录为外部已执行步骤，并把摘要写入 `modeling_state.json`。
 4. 使用 `tools/state_manager.py agent-run` 记录 Agent 运行，使用 `tools/state_manager.py tool-run` 记录工具运行。
 5. Phase 1 只产出 `final_solution.json` 和 `model_decision.md`，正式报告只能在 Phase 2 生成。
+6. 难题或完整交付必须保留 `validation_summary.json`、baseline、oracle/小例验证、solver 交叉验证、敏感性分析和独立复现摘要。
 
 ## 固定产物
 
 每个建模工作区应包含：
 
 - `problem_brief.md`
+- `ambiguity_register.json`
+- `assumption_ledger.md`
 - `modeling_state.json`
 - `modeling_memory.md`
+- `baseline_solution.json`
 - `final_solution.json`
 - `model_decision.md`
 - `modeling_report.md`
 - `solution.py` 或 `solution.m`
 - `results/`
+- `results/validation_summary.json`
 
 ## 验证边界
 
-工具链会检查 LaTeX、代码执行、图表文件、brief 对齐和文档/代码公式一致性。`consistency_checker.py` 是启发式检查，不等价于数学证明；真实任务仍需要 Phase 4 的并行审查 Agent 和问题级断言共同验证。
+工具链会检查 LaTeX、代码执行、图表文件、brief 对齐、文档/代码公式一致性和可信度证据。`consistency_checker.py` 和 `evidence_checker.py` 都是结构化检查，不等价于数学证明；真实任务仍需要 Phase 4 的并行审查 Agent、独立复现 Agent 和问题级断言共同验证。
 
 ## 开源许可
 
