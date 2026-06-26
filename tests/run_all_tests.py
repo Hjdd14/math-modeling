@@ -30,6 +30,7 @@ def main():
         "test_eval_files.py",
         "test_matlab_support.py",
         "test_open_source_readiness.py",
+        "test_doctor.py",
     ]
 
     results = []

@@ -27,6 +27,9 @@ jobs:
       - name: Compile tools
         run: python -m compileall tools
 
+      - name: Run doctor
+        run: python tools/doctor.py --workspace .
+
       - name: Run pytest
         run: python -m pytest tests -q
 

@@ -127,3 +127,42 @@ def test_python_formula_check_ignores_ast_structure_noise(tmp_path):
     assert noisy_symbols.isdisjoint(reported_code_symbols)
     assert result["consistency_score"] >= 80
     assert result["passed"] is True
+
+
+def test_formula_check_does_not_report_long_python_container_names_as_code_only_symbols(tmp_path):
+    doc = tmp_path / "report.md"
+    code = tmp_path / "solution.py"
+    doc.write_text(
+        """
+        $$ Z = 5A + 7B $$
+        $$ 2A + 3B \\leq 20 $$
+        """,
+        encoding="utf-8",
+    )
+    code.write_text(
+        """
+        PRODUCTS = {
+            "A": {"profit": 5, "resource": 2},
+            "B": {"profit": 7, "resource": 3},
+        }
+        CAPACITIES = {"resource": 20}
+
+        def objective(A, B):
+            quantities = {"A": A, "B": B}
+            return sum(PRODUCTS[p]["profit"] * quantities[p] for p in PRODUCTS)
+
+        def feasible(A, B):
+            return sum(PRODUCTS[p]["resource"] * {"A": A, "B": B}[p] for p in PRODUCTS) <= CAPACITIES["resource"]
+        """,
+        encoding="utf-8",
+    )
+
+    result = run_tool("formula", "--doc", str(doc), "--code", str(code), "--lang", "python")
+    reported_code_symbols = {
+        mismatch.get("symbol")
+        for mismatch in result["mismatches"]
+        if mismatch["type"] == "code_only_symbol"
+    }
+    assert "PRODUCTS" not in reported_code_symbols
+    assert "CAPACITIES" not in reported_code_symbols
+    assert result["passed"] is True

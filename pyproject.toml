@@ -13,8 +13,15 @@ dependencies = [
   "openpyxl>=3.1.0",
   "matplotlib>=3.7.0",
   "numpy>=1.24.0",
+  "Pillow>=10.0.0",
+  "scipy>=1.11.0",
   "pypdf>=4.0.0",
   "python-docx>=1.1.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=7.0.0",
 ]
 
 [tool.pytest.ini_options]

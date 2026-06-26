@@ -27,6 +27,12 @@ python -m pip install -r requirements.txt
 
 ## 快速开始
 
+先运行本地体检：
+
+```powershell
+python tools/doctor.py --workspace .
+```
+
 初始化一个工作区：
 
 ```powershell
@@ -36,7 +42,7 @@ python tools/workflow_runner.py scaffold --workspace runs/my_case --language pyt
 解析题目：
 
 ```powershell
-python tools/input_parser.py parse --problem path/to/problem.pdf --workspace runs/my_case
+python tools/input_parser.py brief --problem path/to/problem.pdf --data path/to/data.xlsx --out runs/my_case/problem_brief.md
 ```
 
 恢复已有工作区：
@@ -58,6 +64,16 @@ python -m compileall tools
 python -m pytest tests -q
 python tests/run_all_tests.py
 ```
+
+也可以先试公开合成样例：
+
+```powershell
+python tools/workflow_runner.py scaffold --workspace runs/quickstart --language python
+python tools/input_parser.py brief --problem examples/quickstart/problem.md --data examples/quickstart/production_data.csv --out runs/quickstart/problem_brief.md
+python tools/workflow_runner.py resume --workspace runs/quickstart --language python
+```
+
+示例说明见 `examples/quickstart/README.md`。
 
 ## 给其他 Agent 的使用约定
 

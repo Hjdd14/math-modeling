@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- 新增 `tools/doctor.py`，用于本地依赖、仓库结构、可选工具和 quickstart 示例体检。
+- 新增 `examples/quickstart/` 合成公开样例，帮助新用户先跑通题目解析和状态恢复。
+- 修正 README 中 `input_parser.py` 的错误 quickstart 命令。
+- 补齐 `requirements.txt` 与 `pyproject.toml` 的运行依赖：`matplotlib`、`scipy`、`Pillow`。
+- 降低 `consistency_checker.py` 对 Python 容器/函数长变量名的 `code_only_symbol` 噪声。
+- CI 增加 doctor 检查。
+
 ## 1.0.0 - 2026-06-23
 
 正式版发布。

@@ -24,6 +24,7 @@
 ## 工具验证
 
 ```powershell
+python tools/doctor.py --workspace .
 python -m compileall tools
 python -m pytest tests -q
 python tests/run_all_tests.py
@@ -45,6 +46,7 @@ $env:RUN_MATLAB_TESTS = "1"; python -m pytest tests/test_matlab_support.py -q
 - [ ] 不上传 `.pytest_cache/`、`__pycache__/` 或 `*.pyc`。
 - [ ] 不上传含真实个人信息、未公开竞赛资料或商业数据的附件。
 - [ ] 若包含示例，确保示例为合成数据或已获许可数据。
+- [ ] `examples/quickstart/` 可生成 `problem_brief.md`。
 
 ## 版本标记
 

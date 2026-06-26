@@ -73,6 +73,11 @@ def strip_simple_lhs(formula: str) -> str:
     return re.sub(r"^\s*[A-Z]\s*=", "", formula, count=1)
 
 
+def is_likely_math_symbol(symbol: str) -> bool:
+    """代码侧只报告接近数学记号的独有符号，避免容器/函数名噪声淹没结果"""
+    return bool(re.fullmatch(r"[A-Za-z](?:\d+)?", symbol))
+
+
 def extract_doc_formulas(doc_content: str) -> list:
     """从文档中提取公式"""
     formulas = []
@@ -274,7 +279,10 @@ def check_formula_consistency(doc_path: str, code_path: str, lang: str) -> dict:
 
     common = doc_symbols & code_symbols
     only_in_doc = doc_symbols - code_symbols
-    only_in_code = code_symbols - doc_symbols
+    only_in_code = {
+        symbol for symbol in code_symbols - doc_symbols
+        if is_likely_math_symbol(symbol)
+    }
     doc_only_numbers = doc_numbers - code_numbers
     code_only_numbers = code_numbers - doc_numbers
 

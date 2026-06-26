@@ -42,13 +42,17 @@ def test_readme_documents_portable_skill_usage():
         "并行 Agent",
         "workflow_runner.py",
         "pipeline_check.py",
+        "doctor.py",
         "MATLAB",
         "python -m pytest tests -q",
         "references/workflow.md",
+        "examples/quickstart",
         "正式版",
     ]
     for phrase in required_phrases:
         assert phrase in readme
+    assert "input_parser.py parse" not in readme
+    assert "input_parser.py brief" in readme
 
 
 def test_mit_license_and_changelog_version():
@@ -63,3 +67,26 @@ def test_gitignore_excludes_local_memory_runs_and_caches():
     gitignore = read_text(".gitignore")
     for pattern in ["audit_memory.md", "runs/", "__pycache__/", ".pytest_cache/", "*.bak"]:
         assert pattern in gitignore
+
+
+def test_dependency_files_cover_runtime_and_fixture_imports():
+    requirements = read_text("requirements.txt")
+    pyproject = read_text("pyproject.toml")
+    required_packages = ["pandas", "openpyxl", "numpy", "Pillow", "matplotlib", "scipy", "pypdf", "python-docx"]
+    for package in required_packages:
+        assert package in requirements
+    for package in ["pandas", "openpyxl", "numpy", "Pillow", "matplotlib", "scipy", "pypdf", "python-docx"]:
+        assert package in pyproject
+
+
+def test_public_quickstart_example_exists():
+    required = [
+        "examples/quickstart/README.md",
+        "examples/quickstart/problem.md",
+        "examples/quickstart/production_data.csv",
+    ]
+    missing = [path for path in required if not (SKILL_DIR / path).exists()]
+    assert missing == []
+    example_readme = read_text("examples/quickstart/README.md")
+    assert "input_parser.py brief" in example_readme
+    assert "workflow_runner.py scaffold" in example_readme

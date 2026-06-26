@@ -1,5 +1,13 @@
 # 工具命令与判定
 
+## doctor.py
+
+```bash
+python "tools/doctor.py" --workspace "."
+```
+
+用于新用户或其他 Agent 接手前做本地体检：检查必备文件、运行依赖、可选外部工具、Git 仓库状态和公开 quickstart 示例。`summary.failed > 0` 时先修复依赖或仓库结构。
+
 ## input_parser.py
 
 ```bash

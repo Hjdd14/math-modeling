@@ -72,3 +72,17 @@ def test_build_brief_combines_problem_text_and_data_summary(tmp_path):
     assert "附件数据" in content
     assert "data.csv" in content
     assert result["data_summaries"][0]["structure"]["file_name"] == "data.csv"
+
+
+def test_quickstart_example_can_generate_brief(tmp_path):
+    out_file = tmp_path / "problem_brief.md"
+    result = input_parser.build_brief(
+        os.path.join(SKILL_DIR, "examples", "quickstart", "problem.md"),
+        [os.path.join(SKILL_DIR, "examples", "quickstart", "production_data.csv")],
+        str(out_file),
+    )
+
+    content = out_file.read_text(encoding="utf-8")
+    assert result["written"] is True
+    assert "绿色生产计划优化" in content
+    assert "production_data.csv" in content
