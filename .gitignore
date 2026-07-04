@@ -6,9 +6,22 @@ runs/
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+.tox/
+.nox/
+
+# Python packaging artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
 
 # Virtual environments
 .venv/
@@ -18,14 +31,32 @@ env/
 # Tool/runtime caches
 .mypy_cache/
 .ruff_cache/
+.benchmarks/
 node_modules/
+
+# Codegraph local index
+.codegraph/
+
+# OpenCode run-continuation state (local to each machine)
+.omo/
 
 # OS/editor noise
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
+*.swp
+*~
+
+# Local env files
+.env
+.env.local
 
 # Generated modeling workspaces
 modeling_state.json.lock
 /results/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
