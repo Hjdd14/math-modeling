@@ -1,0 +1,71 @@
+{
+  "name": "math-modeling-mini-contest-benchmark",
+  "version": "2026-06-27",
+  "purpose": "用小型可核验案例评估 skill 是否真实生成建模、代码、图表、验证和写作交接产物，而不是只检查文件存在。",
+  "cases": [
+    {
+      "id": "mini-optimization-01",
+      "category": "optimization",
+      "prompt": "两产品生产计划：A 利润 200、B 利润 300，约束 2A+B<=80、A+3B<=90、A,B>=0，求最大利润。",
+      "expected_outputs": ["baseline_solution.json", "model_spec.json", "solution.py", "results/validation_summary.json", "writer_prompt.md"],
+      "oracle": {
+        "expected_value": 12000,
+        "known_case": {"A": 30, "B": 20},
+        "invariants": ["2*A+B<=80", "A+3*B<=90", "A>=0", "B>=0"]
+      }
+    },
+    {
+      "id": "mini-forecast-01",
+      "category": "forecasting",
+      "prompt": "给定序列 10,12,14,16，预测下一期，并与 naive last-value baseline 比较。",
+      "expected_outputs": ["baseline_solution.json", "results/validation_summary.json", "writer_prompt.md"],
+      "oracle": {
+        "expected_value": 18,
+        "known_case": {"method": "linear trend slope 2"},
+        "invariants": ["model_forecast_error<=baseline_error"]
+      }
+    },
+    {
+      "id": "mini-routing-01",
+      "category": "graph_path",
+      "prompt": "四节点图 S-A-T=5, S-B-T=4, S-T=7，求 S 到 T 最短路。",
+      "expected_outputs": ["model_spec.json", "solution.py", "results/output.csv", "writer_prompt.md"],
+      "oracle": {
+        "expected_value": 4,
+        "known_case": {"path": ["S", "B", "T"]},
+        "invariants": ["path_starts_at_S", "path_ends_at_T", "all_edges_exist"]
+      }
+    },
+    {
+      "id": "mini-simulation-01",
+      "category": "stochastic_simulation",
+      "prompt": "固定随机种子下模拟 3 个服务窗口，要求报告平均等待时间和置信区间。",
+      "expected_outputs": ["results/validation_summary.json", "reproducibility_manifest.json", "writer_prompt.md"],
+      "oracle": {
+        "verifier": "fixed_seed_replay",
+        "invariants": ["random_seed_stability.seeds>=3", "bootstrap_confidence_interval.level>=0.95"]
+      }
+    },
+    {
+      "id": "mini-mechanism-01",
+      "category": "physical_mechanism",
+      "prompt": "水箱流入 3L/min、流出 1L/min，初始 0L，求 10 分钟水量并检查单位。",
+      "expected_outputs": ["symbol_table.json", "model_spec.json", "solution.py", "writer_prompt.md"],
+      "oracle": {
+        "expected_value": 20,
+        "known_case": {"volume_liter_after_10_min": 20},
+        "invariants": ["unit=liter", "volume>=0"]
+      }
+    },
+    {
+      "id": "mini-policy-01",
+      "category": "policy_decision",
+      "prompt": "三方案成本/收益/风险决策，要求给出可解释排名并做权重敏感性分析。",
+      "expected_outputs": ["decision_insights.md", "defense_questions.md", "results/validation_summary.json", "writer_prompt.md"],
+      "oracle": {
+        "known_case": {"dominant_option": "方案B"},
+        "invariants": ["weights_sum_to_1", "ranking_stability_checked", "sensitivity_analysis.passed=true"]
+      }
+    }
+  ]
+}

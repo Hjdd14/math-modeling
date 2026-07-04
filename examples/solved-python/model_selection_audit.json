@@ -1,0 +1,21 @@
+{
+  "candidates": [
+    {
+      "name": "整数枚举优化",
+      "score": 0.93,
+      "rejection_reason": "",
+      "evidence": ["small_scale_oracle", "constraint_residuals"]
+    },
+    {
+      "name": "连续松弛后取整",
+      "score": 0.74,
+      "rejection_reason": "取整后可能破坏材料和碳排约束，需额外修复。",
+      "evidence": ["baseline_comparison"]
+    }
+  ],
+  "final_selection": {
+    "name": "整数枚举优化",
+    "score": 0.93,
+    "evidence": ["optimality_gap=0", "oracle_value=2050"]
+  }
+}

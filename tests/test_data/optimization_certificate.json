@@ -1,0 +1,18 @@
+{
+  "feasibility_residual": {
+    "max_abs": 0.0,
+    "tolerance": 0.000001
+  },
+  "bounds": {
+    "lower": 12000,
+    "upper": 12000
+  },
+  "optimality_gap": {
+    "value": 0.0,
+    "tolerance": 0.0001
+  },
+  "enumeration_oracle": {
+    "passed": true,
+    "case": "two_product_corner_check"
+  }
+}

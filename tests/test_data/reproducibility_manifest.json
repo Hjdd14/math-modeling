@@ -1,7 +1,12 @@
 {
+  "os": {"name": "Windows", "version": "11"},
   "python_version": "3.14",
+  "matlab_version": null,
   "dependencies": {"scipy": ">=1.11", "numpy": ">=1.24"},
   "random_seed": 42,
+  "solvers": [{"name": "scipy.optimize.linprog", "version": "available"}],
+  "random_libraries": [{"name": "numpy.random", "seed": 42}],
+  "execution": {"seconds": 0.5},
   "input_hashes": [],
   "output_hashes": []
 }

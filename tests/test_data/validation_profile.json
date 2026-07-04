@@ -1,0 +1,22 @@
+{
+  "profile": "optimization",
+  "evidence": {
+    "baseline": {
+      "passed": true
+    },
+    "oracle": {
+      "passed": true
+    },
+    "gap": {
+      "value": 0.0,
+      "passed": true
+    },
+    "residuals": {
+      "max_abs": 0.0,
+      "passed": true
+    },
+    "sensitivity": {
+      "passed": true
+    }
+  }
+}

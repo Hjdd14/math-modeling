@@ -10,7 +10,16 @@ from pathlib import Path
 
 
 STRICT_MODES = {"strict", "hard", "complete", "full", "excellence"}
-REQUIRED_FIELDS = ["dependencies", "random_seed", "input_hashes", "output_hashes"]
+REQUIRED_FIELDS = [
+    "dependencies",
+    "random_seed",
+    "input_hashes",
+    "output_hashes",
+    "os",
+    "solvers",
+    "random_libraries",
+    "execution",
+]
 
 
 def output(result: dict):
@@ -85,6 +94,18 @@ def check_manifest(workspace: str, mode: str = "standard") -> dict:
         checks.append({"name": f"field_{field}", "passed": present})
         if not present:
             _add_issue(issues, "missing_manifest_field", f"复现清单缺少 {field}。", field=field)
+
+    execution = manifest.get("execution", {})
+    if isinstance(execution, dict) and "seconds" in execution:
+        try:
+            execution_ok = float(execution["seconds"]) >= 0
+        except (TypeError, ValueError):
+            execution_ok = False
+    else:
+        execution_ok = False
+    checks.append({"name": "execution_time_recorded", "passed": execution_ok})
+    if "execution" in manifest and not execution_ok:
+        _add_issue(issues, "invalid_execution_time", "execution.seconds 必须记录非负运行耗时。")
 
     for group in ["input_hashes", "output_hashes"]:
         entries = manifest.get(group, [])

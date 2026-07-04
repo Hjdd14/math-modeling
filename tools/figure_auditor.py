@@ -14,6 +14,7 @@ except ImportError:
 
 
 STRICT_MODES = {"strict", "hard", "complete", "full", "excellence"}
+STORYBOARD_REQUIRED_FIELDS = ["file", "claim", "source_data", "x_unit", "y_unit", "supports_question"]
 
 
 def output(result: dict):
@@ -36,6 +37,42 @@ def _load_style(root: Path):
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _parse_storyboard(text: str) -> list[dict]:
+    """解析 figure_storyboard.md 中的 YAML-like 列表或 Markdown 表格。"""
+    entries: list[dict] = []
+    current: dict | None = None
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("|") and line.endswith("|"):
+            cells = [cell.strip().strip("`") for cell in line.strip("|").split("|")]
+            if len(cells) >= 5 and cells[0] not in {"图表", "------", "---"} and not set(cells[0]) <= {"-"}:
+                entries.append(
+                    {
+                        "file": cells[0],
+                        "supports_question": cells[1],
+                        "source_data": cells[2],
+                        "claim": cells[3],
+                        "report_position": cells[4],
+                    }
+                )
+            continue
+        if line.startswith("- file:"):
+            if current:
+                entries.append(current)
+            current = {"file": line.split(":", 1)[1].strip().strip("`")}
+            continue
+        if current and ":" in line:
+            key, value = line.split(":", 1)
+            current[key.strip()] = value.strip().strip("`")
+
+    if current:
+        entries.append(current)
+    return entries
 
 
 def audit_figures(workspace: str, mode: str = "standard") -> dict:
@@ -83,7 +120,16 @@ def audit_figures(workspace: str, mode: str = "standard") -> dict:
     if storyboard_path.exists():
         storyboard_text = storyboard_path.read_text(encoding="utf-8", errors="ignore")
         checks.append({"name": "figure_storyboard_present", "passed": True})
+        storyboard_entries = _parse_storyboard(storyboard_text)
+        checks.append({"name": "figure_storyboard_schema", "passed": bool(storyboard_entries), "entries": len(storyboard_entries)})
+        if strict and not storyboard_entries:
+            _add_issue(
+                issues,
+                "invalid_figure_storyboard_schema",
+                "figure_storyboard.md 必须按每图 file/claim/source_data/x_unit/y_unit/supports_question 记录语义证据。",
+            )
     else:
+        storyboard_entries = []
         _add_issue(
             issues,
             "missing_figure_storyboard",
@@ -92,21 +138,62 @@ def audit_figures(workspace: str, mode: str = "standard") -> dict:
         )
 
     png_files = sorted(results_dir.glob("*.png"))
+    png_names = {path.name for path in png_files}
     if not png_files:
         _add_issue(issues, "missing_figures", "results/ 中未找到 PNG 图表。", "error" if strict else "warning")
+
+    storyboard_by_file = {}
+    for entry in storyboard_entries:
+        file_name = entry.get("file")
+        if file_name:
+            storyboard_by_file[file_name] = entry
+        missing_fields = [field for field in STORYBOARD_REQUIRED_FIELDS if not entry.get(field)]
+        if strict and missing_fields:
+            _add_issue(
+                issues,
+                "missing_storyboard_field",
+                "figure_storyboard.md 中每张图必须包含 file、claim、source_data、x_unit、y_unit 和 supports_question。",
+                file=file_name,
+                missing=missing_fields,
+            )
+        if strict and file_name and file_name not in png_names:
+            _add_issue(
+                issues,
+                "storyboard_file_missing",
+                f"figure_storyboard.md 引用的图表文件不存在: {file_name}。",
+                file=file_name,
+            )
 
     for path in png_files:
         base = check_figure(str(path))
         aspect_ratio = (base["width"] / base["height"]) if base.get("height") else 0
         figure_issues = list(base.get("issues", []))
+        dpi = base.get("dpi", [0, 0])
         if aspect_ratio and (aspect_ratio < 0.35 or aspect_ratio > 3.5):
             figure_issues.append("图表比例失衡，可能不适合论文排版")
+        low_dpi = bool(dpi and min(dpi) < 300)
+        if strict and low_dpi:
+            _add_issue(
+                issues,
+                "figure_low_dpi",
+                f"{path.name} 的 DPI 低于 300，不能支撑奖项级图表交付。",
+                file=path.name,
+                dpi=dpi,
+                threshold=300,
+            )
         has_story = not storyboard_text or path.name in storyboard_text or path.stem in storyboard_text
+        storyboard_entry = storyboard_by_file.get(path.name)
         if storyboard_text and not has_story:
             figure_issues.append("图表未在 figure_storyboard.md 中说明叙事用途")
+        if strict and storyboard_text and not storyboard_entry:
+            figure_issues.append("图表未按结构化 schema 在 figure_storyboard.md 中登记")
 
         passed = base.get("quality_score", 0) >= 60 and not base.get("is_blank", True)
         if strict and storyboard_text and not has_story:
+            passed = False
+        if strict and storyboard_text and not storyboard_entry:
+            passed = False
+        if strict and low_dpi:
             passed = False
         if not passed:
             _add_issue(issues, "figure_quality_failed", f"{path.name} 未达到最低图表质量要求。", file=path.name)
@@ -121,6 +208,11 @@ def audit_figures(workspace: str, mode: str = "standard") -> dict:
                 "dpi": base.get("dpi", [0, 0]),
                 "issues": figure_issues,
                 "storyboard_referenced": has_story,
+                "storyboard_claim": storyboard_entry.get("claim") if storyboard_entry else None,
+                "source_data": storyboard_entry.get("source_data") if storyboard_entry else None,
+                "x_unit": storyboard_entry.get("x_unit") if storyboard_entry else None,
+                "y_unit": storyboard_entry.get("y_unit") if storyboard_entry else None,
+                "supports_question": storyboard_entry.get("supports_question") if storyboard_entry else None,
             }
         )
 

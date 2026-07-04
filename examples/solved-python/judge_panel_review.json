@@ -1,0 +1,15 @@
+{
+  "judges": [
+    {"judge_type": "national_modeling_judge", "score": 90, "issues": [], "passed": true},
+    {"judge_type": "comap_judge", "score": 88, "issues": [], "passed": true},
+    {"judge_type": "code_reproducibility_judge", "score": 92, "issues": [], "passed": true},
+    {"judge_type": "figure_evidence_judge", "score": 86, "issues": [], "passed": true},
+    {"judge_type": "engineering_business_judge", "score": 89, "issues": [], "passed": true}
+  ],
+  "chair_summary": {
+    "overall_score": 89,
+    "decision": "pass",
+    "required_fixes": [],
+    "summary": "合成 solved example 的模型、代码、图表和验证证据可以交给写作阶段。"
+  }
+}

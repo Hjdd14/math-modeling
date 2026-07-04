@@ -11,11 +11,11 @@ from tools import (
     figure_auditor,
     manifest_checker,
     model_spec_checker,
-    report_auditor,
     robustness_checker,
     schema_checker,
     solution_test_generator,
     unit_checker,
+    writer_prompt_checker,
 )
 
 
@@ -87,7 +87,11 @@ def test_schema_checker_standard_mode_warns_when_schema_missing(tmp_path):
 
 
 def test_model_spec_checker_validates_required_model_sections(tmp_path):
-    (tmp_path / "modeling_report.md").write_text("## 模型建立\n变量 x 表示产量。\n", encoding="utf-8")
+    (tmp_path / "model_decision.md").write_text("## 模型建立\n变量 x 表示产量。\n", encoding="utf-8")
+    (tmp_path / "writer_prompt.md").write_text(
+        "# 写作交接提示词\n\n本 skill 不生成正式写作正文，只提供写作交接材料。\n\n变量 x 应在模型说明中解释。\n",
+        encoding="utf-8",
+    )
     (tmp_path / "solution.py").write_text("x = 3\nprint(x)\n", encoding="utf-8")
     write_json(
         tmp_path / "model_spec.json",
@@ -210,7 +214,7 @@ def test_figure_auditor_writes_publication_quality_report(tmp_path):
         {"dpi": 300, "font_size": 10, "colorblind_safe": True, "formats": ["png", "pdf"]},
     )
     (tmp_path / "figure_storyboard.md").write_text(
-        "# Figure Storyboard\n\n- `core_result.png`: 回答最优结果是否优于 baseline，放在模型求解节。\n",
+        "# Figure Storyboard\n\n- file: core_result.png\n  claim: 最优结果优于 baseline\n  source_data: results/output.csv\n  x_unit: 产品\n  y_unit: 收益\n  supports_question: Q1\n",
         encoding="utf-8",
     )
 
@@ -221,46 +225,44 @@ def test_figure_auditor_writes_publication_quality_report(tmp_path):
     assert (tmp_path / "results" / "figure_quality_report.json").exists()
 
 
-def test_report_auditor_checks_competition_report_structure(tmp_path):
-    (tmp_path / "modeling_report.md").write_text(
+def test_writer_prompt_checker_checks_handoff_structure(tmp_path):
+    (tmp_path / "writer_prompt.md").write_text(
         """
-# 摘要
-本文给出方法、结果和结论。
-## 问题重述
-回应所有小问。
-## 模型假设
-列出假设。
-## 符号说明
-x 为产量。
-## 模型建立
-建立优化模型。
-## 模型求解
-见图 1。![图1](results/core_result.png)
-## 模型验证
-包含 baseline 与 oracle。
-## 敏感性分析
-参数扰动稳定。
-## 模型评价
-说明优缺点。
-## 结论
-给出可执行建议。
+# 写作交接提示词
+本 skill 已完成建模、代码、图表和验证证据，不生成正式写作正文，只提供写作交接材料。
+## 题目与评分
+- problem_brief.md
+## 模型主线
+- final_solution.json
+## 代码与结果
+- results/validation_summary.json
+## 图表证据
+- figure_storyboard.md
+## 验证证据
+- reproducibility_manifest.json
+## 合规与风险
+- judge_panel_review.json
+- compliance_record.json
+后续写作需披露风险与合规信息。
+## 后续写作/提交复核清单
+- 匿名、引用、AI 披露、页数、附件和代码提交均需按官方规则复核。
 """.strip(),
         encoding="utf-8",
     )
 
-    result = report_auditor.audit_report(str(tmp_path), mode="strict")
+    result = writer_prompt_checker.check_writer_prompt(str(tmp_path), mode="strict")
 
     assert result["passed"] is True
-    assert result["sections_found"] >= 9
+    assert result["sections_found"] >= 6
 
 
-def test_report_auditor_fails_when_report_has_no_conclusion_or_figures(tmp_path):
-    (tmp_path / "modeling_report.md").write_text("# 摘要\n只有方法，没有结果。", encoding="utf-8")
+def test_writer_prompt_checker_fails_when_prompt_asks_for_formal_body(tmp_path):
+    (tmp_path / "writer_prompt.md").write_text("# 正文\n请直接写完整论文。", encoding="utf-8")
 
-    result = report_auditor.audit_report(str(tmp_path), mode="strict")
+    result = writer_prompt_checker.check_writer_prompt(str(tmp_path), mode="strict")
 
     assert result["passed"] is False
-    assert any(issue["code"] == "missing_report_section" for issue in result["issues"])
+    assert any(issue["code"] == "writer_prompt_missing_boundary" for issue in result["issues"])
 
 
 def test_manifest_checker_verifies_reproducibility_hashes(tmp_path):
@@ -270,9 +272,14 @@ def test_manifest_checker_verifies_reproducibility_hashes(tmp_path):
     write_json(
         tmp_path / "reproducibility_manifest.json",
         {
+            "os": {"name": "Windows", "version": "11"},
             "python_version": "3.14",
+            "matlab_version": None,
             "dependencies": {"numpy": "2.0"},
             "random_seed": 42,
+            "solvers": [{"name": "enumeration", "version": "builtin"}],
+            "random_libraries": [{"name": "numpy.random", "seed": 42}],
+            "execution": {"seconds": 0.1},
             "input_hashes": [{"path": "data.csv", "sha256": sha256(tmp_path / "data.csv")}],
             "output_hashes": [{"path": "results/output.csv", "sha256": sha256(tmp_path / "results" / "output.csv")}],
         },
@@ -289,9 +296,13 @@ def test_manifest_checker_fails_on_hash_mismatch(tmp_path):
     write_json(
         tmp_path / "reproducibility_manifest.json",
         {
+            "os": {"name": "Windows", "version": "11"},
             "python_version": "3.14",
             "dependencies": {},
             "random_seed": 42,
+            "solvers": [{"name": "enumeration"}],
+            "random_libraries": [{"name": "numpy.random", "seed": 42}],
+            "execution": {"seconds": 0.1},
             "input_hashes": [{"path": "data.csv", "sha256": "wrong"}],
             "output_hashes": [],
         },

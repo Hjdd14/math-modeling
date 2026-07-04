@@ -1,0 +1,19 @@
+{
+  "innovations": [
+    {
+      "id": "I1",
+      "claim": "用可解释枚举作为整数规划 oracle",
+      "problem_pain_point": "生产排程结果需要证明最优解不是单一求解器偶然输出",
+      "baseline_gain": {
+        "metric": "objective_confidence",
+        "delta": 0.15,
+        "evidence": "ablation_study.json"
+      },
+      "implementation_cost": "low",
+      "interpretability": "枚举空间小，可以直接解释最优性",
+      "verification_evidence": ["baseline_comparison", "oracle_tests", "solver_cross_checks"],
+      "failure_risk": "规模扩大时枚举不可直接使用，需要保留为小规模 oracle",
+      "decision": "accepted"
+    }
+  ]
+}

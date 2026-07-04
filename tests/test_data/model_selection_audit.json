@@ -1,0 +1,21 @@
+{
+  "candidates": [
+    {
+      "name": "整数规划",
+      "score": 0.91,
+      "rejection_reason": "",
+      "evidence": ["oracle", "constraint_residuals"]
+    },
+    {
+      "name": "贪心启发式",
+      "score": 0.72,
+      "rejection_reason": "不能保证全局最优，且对利润扰动更敏感。",
+      "evidence": ["baseline"]
+    }
+  ],
+  "final_selection": {
+    "name": "整数规划",
+    "score": 0.91,
+    "evidence": ["optimality_gap=0", "max_residual=0"]
+  }
+}

@@ -17,6 +17,6 @@
 
 ## 输出要求
 
-- `modeling_report.md`：包含模型假设、变量、目标函数、约束和结果分析。
+- `writer_prompt.md`：交接模型假设、变量、目标函数、约束、结果证据和后续写作注意事项；不生成正式写作正文。
 - `solution.py` 或 `solution.m`：可运行代码。
 - `results/`：保存结果表和图表。

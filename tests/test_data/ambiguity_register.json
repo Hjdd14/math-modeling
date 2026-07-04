@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "id": "A1",
+      "severity": "low",
+      "source": "problem_brief.md",
+      "issue": "A、B 产品产量是否必须为整数",
+      "impact": "影响求解器选择和最优解解释",
+      "resolution": "resolved",
+      "assumption_if_unresolved": "按连续产量处理，并在必要时进行整数可行性复核"
+    }
+  ]
+}

@@ -39,5 +39,27 @@ jobs:
       - name: Verify fixture workspace
         run: python tools/pipeline_check.py --workspace tests/test_data --language python
 
+      - name: Verify excellence fixture workspace
+        run: python tools/pipeline_check.py --workspace tests/test_data --language python --evidence-mode strict --quality-mode excellence
+
+      - name: Verify source registry
+        run: python tools/source_registry_checker.py --skill-root . --mode excellence
+
+      - name: Verify source freshness offline
+        run: python tools/source_freshness_checker.py --workspace . --mode excellence
+
+      - name: Verify award readiness artifacts
+        run: python tools/award_readiness_checker.py --workspace tests/test_data --mode excellence
+
+      - name: Verify mini benchmark structure
+        run: python tools/mini_benchmark_checker.py --benchmark evals/mini_contest_benchmark.json --mode strict
+
+      - name: Run mini benchmark
+        run: python tools/mini_benchmark_runner.py --benchmark evals/mini_contest_benchmark.json --mode strict
+
+      - name: Check workflow JavaScript
+        shell: pwsh
+        run: Get-ChildItem workflows -Filter *.js | ForEach-Object { node --check $_.FullName }
+
       - name: Resume fixture workspace
         run: python tools/workflow_runner.py resume --workspace tests/test_data --language python

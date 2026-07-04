@@ -22,13 +22,13 @@ def test_scaffold_creates_workspace_state_and_results_dir(tmp_path):
 
 
 def test_resume_infers_existing_workspace_without_state(tmp_path):
-    for name in ["problem_brief.md", "modeling_report.md", "solution.py"]:
+    for name in ["problem_brief.md", "writer_prompt.md", "solution.py"]:
         shutil.copy2(os.path.join(TEST_DATA, name), tmp_path / name)
     shutil.copytree(os.path.join(TEST_DATA, "results"), tmp_path / "results", dirs_exist_ok=True)
 
     result = workflow_runner.resume_workspace(str(tmp_path), "python")
     assert result["state"]["artifacts"]["problem_brief"]["exists"] is True
-    assert result["state"]["artifacts"]["modeling_report"]["exists"] is True
+    assert result["state"]["artifacts"]["writer_prompt"]["exists"] is True
     assert result["state"]["artifacts"]["results_dir"]["exists"] is True
 
 
@@ -46,7 +46,7 @@ def test_resume_preserves_existing_phase_tool_and_agent_history(tmp_path):
         "agent_outputs/phase1/initial_solutions.json",
     )
 
-    for name in ["problem_brief.md", "modeling_report.md", "solution.py"]:
+    for name in ["problem_brief.md", "writer_prompt.md", "solution.py"]:
         shutil.copy2(os.path.join(TEST_DATA, name), tmp_path / name)
     shutil.copytree(os.path.join(TEST_DATA, "results"), tmp_path / "results", dirs_exist_ok=True)
 
@@ -59,7 +59,7 @@ def test_resume_preserves_existing_phase_tool_and_agent_history(tmp_path):
 
 
 def test_verify_delegates_to_pipeline_check(tmp_path):
-    for name in ["problem_brief.md", "modeling_report.md", "solution.py"]:
+    for name in ["problem_brief.md", "writer_prompt.md", "solution.py"]:
         shutil.copy2(os.path.join(TEST_DATA, name), tmp_path / name)
     shutil.copytree(os.path.join(TEST_DATA, "results"), tmp_path / "results")
 

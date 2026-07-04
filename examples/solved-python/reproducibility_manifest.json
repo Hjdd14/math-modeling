@@ -1,8 +1,12 @@
 {
+  "os": {"name": "Windows", "version": "11"},
   "python_version": "3.14",
+  "matlab_version": null,
   "dependencies": {"pandas": ">=2.0", "matplotlib": ">=3.7"},
   "random_seed": 42,
+  "solvers": [{"name": "complete_integer_enumeration", "version": "builtin"}],
+  "random_libraries": [{"name": "numpy.random", "seed": 42}],
+  "execution": {"seconds": 0.8},
   "input_hashes": [],
   "output_hashes": []
 }
-

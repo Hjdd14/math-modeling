@@ -54,14 +54,27 @@ def test_readme_documents_portable_skill_usage():
         "MATLAB",
         "python -m pytest tests -q",
         "references/workflow.md",
+        "references/award_playbook.md",
+        "references/evaluator_panel.md",
         "examples/quickstart",
         "examples/solved-python",
         "正式版",
+        "writer_prompt.md",
+        "case_retrieval_checker.py",
+        "award_readiness_checker.py",
+        "source_registry_checker.py",
+        "source_material_reader.py",
+        "writer_prompt_checker.py",
+        "innovation_checker.py",
+        "judge_panel_checker.py",
+        "compliance_checker.py",
+        "competition_sources.json",
     ]
     for phrase in required_phrases:
         assert phrase in readme
     assert "input_parser.py parse" not in readme
     assert "input_parser.py brief" in readme
+    assert "正式写作正文" in readme
 
 
 def test_mit_license_and_changelog_version():
@@ -115,7 +128,11 @@ def test_public_solved_python_example_exists():
         "examples/solved-python/results/validation_summary.json",
         "examples/solved-python/figure_style.json",
         "examples/solved-python/figure_storyboard.md",
-        "examples/solved-python/modeling_report.md",
+        "examples/solved-python/writer_prompt.md",
+        "examples/solved-python/case_retrieval.json",
+        "examples/solved-python/innovation_register.json",
+        "examples/solved-python/judge_panel_review.json",
+        "examples/solved-python/compliance_record.json",
         "examples/solved-python/decision_insights.md",
         "examples/solved-python/defense_questions.md",
         "examples/solved-python/reproducibility_manifest.json",

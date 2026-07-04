@@ -59,6 +59,64 @@ def test_validation_summary_contains_required_sections():
     assert missing == []
 
 
+def test_constraint_invariants_pass():
+    data = load_json("results/validation_summary.json")
+    invariants = data.get("invariants", [])
+    assert invariants, "validation_summary.json must record constraint invariants"
+    failed = [item for item in invariants if isinstance(item, dict) and item.get("passed") is False]
+    assert failed == []
+
+
+def test_oracle_checks_pass():
+    data = load_json("results/validation_summary.json")
+    oracle_tests = data.get("oracle_tests", data.get("known_case_tests", []))
+    assert oracle_tests, "small-scale oracle or known-case tests are required"
+    failed = [item for item in oracle_tests if isinstance(item, dict) and item.get("passed") is False]
+    assert failed == []
+
+
+def test_baseline_not_worse_than_required_threshold():
+    data = load_json("results/validation_summary.json")
+    baseline = data.get("baseline_comparison", {})
+    assert baseline, "baseline comparison is required"
+    assert baseline.get("passed") is True
+    if "baseline_value" in baseline and "model_value" in baseline:
+        tolerance = float(baseline.get("tolerance", 0))
+        higher_is_better = baseline.get("higher_is_better", True)
+        if higher_is_better:
+            assert float(baseline["model_value"]) + tolerance >= float(baseline["baseline_value"])
+        else:
+            assert float(baseline["model_value"]) <= float(baseline["baseline_value"]) + tolerance
+
+
+def test_random_seed_stability_recorded():
+    data = load_json("results/validation_summary.json")
+    stability = data.get("random_seed_stability", {})
+    assert stability, "random seed stability evidence is required"
+    seeds = stability.get("seeds", [])
+    assert isinstance(seeds, list) and len(seeds) >= 3
+    assert stability.get("passed") is not False
+
+
+def test_multi_start_runs_recorded():
+    data = load_json("results/validation_summary.json")
+    multi_start = data.get("multi_start", {})
+    assert multi_start, "multi-start evidence is required"
+    runs = int(multi_start.get("runs", 0))
+    assert runs >= 3
+    assert multi_start.get("passed") is not False
+
+
+def test_bootstrap_confidence_level_recorded():
+    data = load_json("results/validation_summary.json")
+    interval = data.get("bootstrap_confidence_interval", {})
+    assert interval, "bootstrap confidence interval evidence is required"
+    level = float(interval.get("level", 0))
+    assert level >= 0.95
+    assert float(interval.get("lower", 0)) <= float(interval.get("upper", 0))
+    assert interval.get("passed") is not False
+
+
 def test_model_spec_exists_and_has_core_sections():
     spec_path = ROOT / "model_spec.json"
     assert spec_path.exists()
@@ -84,7 +142,8 @@ MATLAB_TEST_TEMPLATE = '''% 由 solution_test_generator.py 生成的 MATLAB 检�
 % 1. results/output.csv 存在
 % 2. results/summary.json 存在
 % 3. results/validation_summary.json 包含 baseline、oracle、交叉验证、敏感性与鲁棒性字段
-% 4. model_spec.json 与 symbol_table.json 已同步
+% 4. 随机种子稳定性至少 3 个 seeds，多初值至少 3 次，bootstrap 置信水平至少 0.95
+% 5. model_spec.json 与 symbol_table.json 已同步
 '''
 
 

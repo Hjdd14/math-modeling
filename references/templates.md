@@ -147,6 +147,86 @@
 }
 ```
 
+## model_selection_audit.json
+
+```json
+{
+  "candidates": [
+    {"name": "integer_programming", "score": 0.92, "evidence": ["oracle_tests", "gap=0"]},
+    {"name": "greedy_baseline", "score": 0.61, "rejection_reason": "不能证明全局最优", "evidence": ["baseline_comparison"]}
+  ],
+  "final_selection": {
+    "name": "integer_programming",
+    "score": 0.92,
+    "evidence": ["constraint_residuals=0", "optimality_gap=0", "solver_cross_checks"]
+  }
+}
+```
+
+## optimization_certificate.json
+
+```json
+{
+  "feasibility_residual": {"max_abs": 0.0, "tolerance": 1e-6},
+  "bounds": {"lower": 0, "upper": 0},
+  "optimality_gap": {"value": 0.0, "tolerance": 1e-4},
+  "alternative_solver": {"name": "enumeration_or_second_solver", "value": 0, "passed": true}
+}
+```
+
+## uncertainty_budget.json
+
+```json
+{
+  "data": {"impact": "medium", "mitigation": "schema/hash/missingness checks"},
+  "parameter": {"impact": "medium", "sensitivity": "关键参数正负扰动"},
+  "model": {"impact": "medium", "evidence": "baseline、oracle、消融和评委审查"},
+  "random": {"impact": "low", "mitigation": "固定随机种子并记录 3 个以上 seeds"}
+}
+```
+
+## validation_profile.json
+
+```json
+{
+  "profile": "optimization",
+  "evidence": {
+    "baseline": {"passed": true},
+    "oracle": {"passed": true},
+    "gap": {"value": 0.0, "passed": true},
+    "residuals": {"max_abs": 0.0, "passed": true},
+    "sensitivity": {"passed": true}
+  }
+}
+```
+
+## data_validation.json
+
+```json
+{
+  "task_type": "forecasting",
+  "target": "target_column",
+  "features": ["feature_1", "feature_2"],
+  "split": {"type": "time_series", "train_end": "YYYY-MM-DD", "holdout_start": "YYYY-MM-DD"},
+  "preprocessing": [
+    {"name": "standard_scaler", "fit_on": "train"}
+  ]
+}
+```
+
+## statistical_validation.json
+
+```json
+{
+  "holdout": {"method": "time_split", "passed": true},
+  "metrics": {"MAE": 0.0, "RMSE": 0.0, "MAPE": 0.0},
+  "residuals": {"checked": true},
+  "intervals": {"level": 0.95, "coverage": 0.95},
+  "robustness": {"passed": true},
+  "overfitting_risk": {"level": "low", "evidence": "holdout/CV gap acceptable"}
+}
+```
+
 ## ablation_study.json
 
 ```json
@@ -195,26 +275,165 @@
 }
 ```
 
-## modeling_report.md
+## case_retrieval.json
+
+```json
+{
+  "problem_domain": "电力调度",
+  "matched_problem_types": ["电力电工", "优化调度"],
+  "matched_cases": [
+    {
+      "rank": 1,
+      "source_competition": "中国电机工程学会杯全国大学生电工数学建模竞赛",
+      "year": "2026",
+      "problem_id": "A/B",
+      "problem_type": "电力电工",
+      "similarity_reason": "题目领域、数据结构和约束形式相近",
+      "borrowable_methods": ["负荷预测", "潮流约束", "鲁棒调度"],
+      "cannot_copy_risks": ["工况、电网拓扑和参数口径不同，不能照搬变量定义"],
+      "validation_needed": ["小例 oracle", "物理约束检查", "敏感性分析"]
+    }
+  ],
+  "candidate_methods": ["robust_dispatch", "scenario_analysis"],
+  "cannot_copy_risks": ["公开案例只提供题型和验证启发，不复制原作品正文"]
+}
+```
+
+## innovation_register.json
+
+```json
+{
+  "innovations": [
+    {
+      "id": "I1",
+      "claim": "用 Pareto 前沿解释多目标权衡",
+      "problem_pain_point": "单一加权和会掩盖目标冲突",
+      "baseline_gain": {
+        "metric": "profit_per_emission",
+        "delta": 0.12,
+        "evidence": "ablation_study.json"
+      },
+      "implementation_cost": "medium",
+      "interpretability": "通过权衡图和敏感性分析解释",
+      "verification_evidence": ["baseline_comparison", "ablation_study", "sensitivity_analysis"],
+      "failure_risk": "数据规模过小时前沿可能不稳定",
+      "decision": "accepted"
+    }
+  ]
+}
+```
+
+## writer_prompt.md
 
 ```markdown
-# [问题标题] 数学建模报告
+# 写作交接提示词
 
-## 1. 问题描述
+本 skill 已完成建模、代码、图表和验证证据，不生成正式写作正文。请后续写作 skill 基于下列材料写作，并保持匿名性与合规披露。
 
-## 2. 题意审计与假设
+## 1. 题目与小问
 
-## 3. 符号说明
+- 来源：problem_brief.md
+- 必答结果：
+- 评分重点：
+- 竞赛来源匹配：case_retrieval.json
 
-## 4. 模型建立
+## 2. 模型主线
 
-## 5. 模型求解
+- 来源：final_solution.json / model_spec.json / model_decision.md
+- 选择理由：
+- 被拒方案：
 
-## 6. baseline 与结果验证
+## 3. 创新与证据
 
-## 7. 敏感性分析
+- 来源：case_retrieval.json / innovation_register.json / ablation_study.json
+- 创新点：
+- baseline 增益：
+- 敏感性或消融证据：
 
-## 8. 模型评价
+## 4. 代码与结果
+
+- 代码：solution.py 或 solution.m
+- 结果：results/output.csv、results/summary.json、results/validation_summary.json
+- 复现：reproducibility_manifest.json
+
+## 5. 图表交接
+
+- 来源：figure_storyboard.md / figure_style.json / results/figure_quality_report.json
+- 每张图支撑的结论：
+
+## 6. 评委组审查与风险
+
+- 多评委审查：judge_panel_review.json
+- high severity 是否全部解决：
+- 风险提示：
+
+## 7. 合规提示
+
+- AI 使用记录：compliance_record.json
+- 外部资料引用：
+- 匿名性检查：
+- 复现清单：reproducibility_manifest.json
+
+## 8. 后续写作/提交复核清单
+
+- 匿名：
+- 引用：
+- AI 披露：
+- 页数/格式：
+- 附件：
+- 代码提交：
+```
+
+## judge_panel_review.json
+
+```json
+{
+  "judges": [
+    {"judge_type": "national_modeling_judge", "score": 88, "issues": [], "passed": true},
+    {"judge_type": "comap_judge", "score": 86, "issues": [], "passed": true},
+    {"judge_type": "code_reproducibility_judge", "score": 91, "issues": [], "passed": true},
+    {"judge_type": "figure_evidence_judge", "score": 84, "issues": [], "passed": true},
+    {"judge_type": "engineering_business_judge", "score": 87, "issues": [], "passed": true}
+  ],
+  "chair_summary": {
+    "overall_score": 87,
+    "decision": "pass",
+    "required_fixes": [],
+    "summary": "模型、代码、图表和验证证据可以交给写作阶段。"
+  }
+}
+```
+
+## compliance_record.json
+
+```json
+{
+  "ai_usage": {
+    "used": true,
+    "tools": [{"name": "Codex", "version": "GPT-5", "purpose": "建模代码与验证辅助"}],
+    "disclosure_required": true,
+    "human_reviewed": true
+  },
+  "anonymity": {"checked": true, "identity_terms_found": []},
+  "external_sources": [
+    {"source": "COMAP instructions", "citation_location": "writer_prompt.md#合规提示"}
+  ],
+  "reproducibility": {
+    "manifest": "reproducibility_manifest.json",
+    "commands": ["python solution.py", "python tools/pipeline_check.py --quality-mode excellence"],
+    "input_hashes_recorded": true,
+    "output_hashes_recorded": true
+  },
+  "final_submission": {
+    "anonymity": true,
+    "ai_disclosure": true,
+    "citation_check": true,
+    "page_limit_checked": true,
+    "attachment_check": true,
+    "code_submission_note": "提交前复跑代码并确认环境说明。",
+    "official_rules_reviewed": true
+  }
+}
 ```
 
 ## validation_summary.json
@@ -342,9 +561,13 @@ def test_validation_summary_fields():
 ```markdown
 # Figure Storyboard
 
-| 图表 | 回答的问题 | 数据来源 | 预期结论 | 报告位置 |
-|------|------------|----------|----------|----------|
-| result_baseline_vs_final.png | 完整模型是否优于 baseline | results/output.csv | 完整模型提升明显 | 模型求解 |
+- file: result_baseline_vs_final.png
+  claim: 完整模型相对 baseline 提升明显
+  source_data: results/output.csv
+  x_unit: 情景
+  y_unit: 指标值
+  supports_question: Q1
+  report_position: 模型求解
 ```
 
 ## decision_insights.md
@@ -373,9 +596,13 @@ def test_validation_summary_fields():
 
 ```json
 {
+  "os": {"name": "Windows/Linux/macOS", "version": "..."},
   "python_version": "3.x",
   "matlab_version": null,
+  "solvers": [{"name": "scipy.optimize.linprog", "version": "..."}],
   "dependencies": {"numpy": "version", "pandas": "version"},
+  "random_libraries": [{"name": "numpy.random", "seed": 42}],
+  "execution": {"seconds": 0.0},
   "random_seed": 42,
   "input_hashes": [{"path": "data.csv", "sha256": "..."}],
   "output_hashes": [{"path": "results/output.csv", "sha256": "..."}]
@@ -455,8 +682,8 @@ def write_validation_summary():
         ],
         "constraint_residuals": {"max_abs": 0.0, "passed": True},
         "optimality_gap": {"value": 0.0, "passed": True},
-        "multi_start": {"runs": 1, "best_values": [0.0], "passed": True},
-        "random_seed_stability": {"seeds": [42], "std": 0.0, "passed": True},
+        "multi_start": {"runs": 3, "best_values": [0.0, 0.0, 0.0], "passed": True},
+        "random_seed_stability": {"seeds": [1, 2, 3], "std": 0.0, "passed": True},
         "bootstrap_confidence_interval": {
             "level": 0.95,
             "lower": 0.0,
@@ -535,8 +762,8 @@ validation.invariants = struct("name", "constraints_satisfied", "passed", true);
 validation.failure_modes = struct("name", "missing_or_invalid_input", "mitigation", "stop with explicit error");
 validation.constraint_residuals = struct("max_abs", 0, "passed", true);
 validation.optimality_gap = struct("value", 0, "passed", true);
-validation.multi_start = struct("runs", 1, "best_values", 0, "passed", true);
-validation.random_seed_stability = struct("seeds", 42, "std", 0, "passed", true);
+validation.multi_start = struct("runs", 3, "best_values", [0, 0, 0], "passed", true);
+validation.random_seed_stability = struct("seeds", [1, 2, 3], "std", 0, "passed", true);
 validation.bootstrap_confidence_interval = struct("level", 0.95, "lower", 0, "upper", 0, "passed", true);
 validation.perturbation_stability = struct("ranking_changed", false, "passed", true);
 fid = fopen(fullfile(resultsDir, "validation_summary.json"), "w");
@@ -586,13 +813,16 @@ end
 - baseline_solution.json：
 - 动态专家 Agent：
 
-## Phase 2/3: 并行文档与代码
+## Phase 2/3: 写作交接文档与代码并行
 
 ## Phase 4: 并行审查、独立复现与验证
 - validation_summary.json：
 - 独立复现 Agent：
+- judge_panel_review.json：
 
 ## Phase 5: 归档
+- writer_prompt.md：
+- compliance_record.json：
 
 ## 更新日志
 ```

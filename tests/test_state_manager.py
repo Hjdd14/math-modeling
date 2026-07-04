@@ -40,7 +40,7 @@ def test_state_manager_records_phase_artifacts_tools_and_agents(tmp_path):
 
 
 def test_inspect_workspace_infers_existing_artifacts(tmp_path):
-    for name in ["problem_brief.md", "final_solution.json", "modeling_report.md", "solution.py"]:
+    for name in ["problem_brief.md", "final_solution.json", "writer_prompt.md", "solution.py"]:
         (tmp_path / name).write_text("x", encoding="utf-8")
     (tmp_path / "results").mkdir()
 

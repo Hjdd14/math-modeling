@@ -47,7 +47,7 @@ def test_e2e_data_analysis():
 def test_e2e_validation_flow():
     """测试2：完整验证流程"""
     brief_file = os.path.join(TEST_DATA, "problem_brief.md")
-    report_file = os.path.join(TEST_DATA, "modeling_report.md")
+    model_file = os.path.join(TEST_DATA, "model_decision.md")
     code_file = os.path.join(TEST_DATA, "solution.py")
 
     extract_result = run_tool("brief_validator.py", "extract", "--brief", brief_file)
@@ -55,7 +55,7 @@ def test_e2e_validation_flow():
     assert len(extract_result["solve_targets"]) > 0
 
     model_check = run_tool("brief_validator.py", "validate",
-                           "--brief", brief_file, "--stage", "model", "--target", report_file)
+                           "--brief", brief_file, "--stage", "model", "--target", model_file)
     assert "passed" in model_check
     assert "checks" in model_check
 
@@ -65,7 +65,7 @@ def test_e2e_validation_flow():
 
     report_result = run_tool("brief_validator.py", "report",
                              "--brief", brief_file,
-                             "--files", json.dumps({"model": report_file, "code": code_file}))
+                             "--files", json.dumps({"model": model_file, "code": code_file}))
     assert "overall_score" in report_result
 
 
@@ -120,7 +120,9 @@ def test_e2e_full_pipeline():
     """测试7：完整全流程管线"""
     data_file = os.path.join(TEST_DATA, "data.xlsx")
     brief_file = os.path.join(TEST_DATA, "problem_brief.md")
-    report_file = os.path.join(TEST_DATA, "modeling_report.md")
+    model_file = os.path.join(TEST_DATA, "model_decision.md")
+    valid_latex_file = os.path.join(SKILL_DIR, "tests", "test_docs", "valid_latex.md")
+    consistency_doc = os.path.join(SKILL_DIR, "tests", "test_docs", "report.md")
     code_file = os.path.join(TEST_DATA, "solution.py")
 
     read_result = run_tool("data_analyzer.py", "read", "--file", data_file)
@@ -130,18 +132,18 @@ def test_e2e_full_pipeline():
     assert "quality_score" in quality_result
 
     model_check = run_tool("brief_validator.py", "validate",
-                           "--brief", brief_file, "--stage", "model", "--target", report_file)
+                           "--brief", brief_file, "--stage", "model", "--target", model_file)
     assert "checks" in model_check
 
     code_check = run_tool("brief_validator.py", "validate",
                           "--brief", brief_file, "--stage", "code", "--target", code_file)
     assert "checks" in code_check
 
-    latex_check = run_tool("latex_validator.py", "validate", "--file", report_file)
+    latex_check = run_tool("latex_validator.py", "validate", "--file", valid_latex_file)
     assert "score" in latex_check
 
     consistency = run_tool("consistency_checker.py", "formula",
-                           "--doc", report_file, "--code", code_file, "--lang", "python")
+                           "--doc", consistency_doc, "--code", code_file, "--lang", "python")
     assert "consistency_score" in consistency
 
     print("Full pipeline completed successfully")

@@ -1,0 +1,18 @@
+{
+  "data": {
+    "impact": "low",
+    "mitigation": "示例数据为合成数据，字段和单位由 data_schema.json 固定。"
+  },
+  "parameter": {
+    "impact": "medium",
+    "sensitivity": "利润、材料和碳排参数做局部扰动后复查排名。"
+  },
+  "model": {
+    "impact": "medium",
+    "evidence": "枚举 oracle、baseline 对比和约束残差共同支撑模型选择。"
+  },
+  "random": {
+    "impact": "low",
+    "evidence": "确定性枚举；仍记录随机种子稳定性字段以统一复现契约。"
+  }
+}

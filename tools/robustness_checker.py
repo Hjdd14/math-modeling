@@ -62,6 +62,103 @@ def _explicit_failure(value) -> bool:
     return False
 
 
+def _as_float(value, default=None):
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _numeric_threshold_issues(item: str, value) -> list[dict]:
+    issues = []
+    if not isinstance(value, dict):
+        return issues
+
+    if item == "constraint_residuals":
+        actual = _as_float(value.get("max_abs"))
+        tolerance = _as_float(value.get("tolerance"), 1e-6)
+        if actual is not None and tolerance is not None and actual > tolerance:
+            issues.append(
+                {
+                    "item": item,
+                    "actual": actual,
+                    "threshold": tolerance,
+                    "message": f"约束最大残差 {actual} 超过阈值 {tolerance}。",
+                }
+            )
+
+    if item == "optimality_gap":
+        actual = _as_float(value.get("value"))
+        tolerance = _as_float(value.get("tolerance"), 1e-4)
+        if actual is not None and tolerance is not None and actual > tolerance:
+            issues.append(
+                {
+                    "item": item,
+                    "actual": actual,
+                    "threshold": tolerance,
+                    "message": f"最优性 gap {actual} 超过阈值 {tolerance}。",
+                }
+            )
+
+    if item == "multi_start":
+        runs = int(_as_float(value.get("runs"), 0) or 0)
+        min_runs = int(_as_float(value.get("min_runs"), 3) or 3)
+        if runs < min_runs:
+            issues.append(
+                {
+                    "item": item,
+                    "actual": runs,
+                    "threshold": min_runs,
+                    "message": f"多初值运行次数 {runs} 少于要求 {min_runs}。",
+                }
+            )
+
+    if item == "random_seed_stability":
+        seeds = value.get("seeds", [])
+        if not isinstance(seeds, list) or len(seeds) < 3:
+            issues.append(
+                {
+                    "item": item,
+                    "actual": len(seeds) if isinstance(seeds, list) else 0,
+                    "threshold": 3,
+                    "message": "随机种子稳定性至少应记录 3 个种子。",
+                }
+            )
+
+    if item == "bootstrap_confidence_interval":
+        lower = _as_float(value.get("lower"))
+        upper = _as_float(value.get("upper"))
+        level = _as_float(value.get("level"), 0)
+        if lower is not None and upper is not None and lower > upper:
+            issues.append(
+                {
+                    "item": item,
+                    "message": "置信区间 lower 大于 upper。",
+                }
+            )
+        if level is not None and level < 0.95:
+            issues.append(
+                {
+                    "item": item,
+                    "actual": level,
+                    "threshold": 0.95,
+                    "message": "置信水平低于 0.95，不能支撑奖项级交付。",
+                }
+            )
+
+    if item == "perturbation_stability" and value.get("ranking_changed") is True:
+        issues.append(
+            {
+                "item": item,
+                "message": "参数扰动后排序发生变化，需要解释或修正。",
+            }
+        )
+
+    return issues
+
+
 def check_robustness(workspace: str, mode: str = "standard") -> dict:
     root = Path(workspace)
     summary_path = root / "results" / "validation_summary.json"
@@ -95,9 +192,19 @@ def check_robustness(workspace: str, mode: str = "standard") -> dict:
             continue
         evidence_items_checked += 1
         failed = _explicit_failure(value)
-        checks.append({"name": item, "passed": not failed})
+        threshold_issues = _numeric_threshold_issues(item, value) if mode in STRICT_MODES else []
+        checks.append({"name": item, "passed": not failed and not threshold_issues})
         if failed:
             _add_issue(issues, "robustness_item_failed", f"{item} 显式标记为失败。", item=item)
+        for threshold_issue in threshold_issues:
+            _add_issue(
+                issues,
+                "robustness_threshold_failed",
+                threshold_issue["message"],
+                item=item,
+                actual=threshold_issue.get("actual"),
+                threshold=threshold_issue.get("threshold"),
+            )
 
     checks.append({"name": "required_robustness_items", "passed": not missing, "missing": missing})
     passed = not any(issue.get("severity") == "error" for issue in issues)

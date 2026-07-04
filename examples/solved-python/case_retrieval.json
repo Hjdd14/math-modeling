@@ -1,0 +1,30 @@
+{
+  "problem_domain": "智能工厂绿色生产排程优化",
+  "matched_problem_types": ["优化调度", "多目标鲁棒", "机器学习混合"],
+  "matched_cases": [
+    {
+      "rank": 1,
+      "source_competition": "高教社杯全国大学生数学建模竞赛 CUMCM",
+      "year": "2024",
+      "problem_id": "B/C 类资源配置题",
+      "problem_type": "优化调度",
+      "similarity_reason": "示例题包含产能、资源、利润和环境指标约束，适合借鉴优化调度题的建模与验证结构。",
+      "borrowable_methods": ["整数规划", "资源约束可行性检查", "小规模枚举 oracle", "敏感性分析"],
+      "cannot_copy_risks": ["示例题是合成数据，不能把真实竞赛题参数、结论或论文结构直接套用。"],
+      "validation_needed": ["baseline_comparison", "constraint_residuals", "oracle_tests", "sensitivity_analysis"]
+    },
+    {
+      "rank": 2,
+      "source_competition": "MathorCup 数学应用挑战赛及大数据竞赛",
+      "year": "2025",
+      "problem_id": "行业数据题",
+      "problem_type": "机器学习混合",
+      "similarity_reason": "可借鉴行业数据清洗、特征解释和业务图表证据组织方式。",
+      "borrowable_methods": ["data_schema_audit", "feature_ablation", "business_metric_storyboard"],
+      "cannot_copy_risks": ["MathorCup 数据口径和本合成示例不同，不能照搬模型假设。"],
+      "validation_needed": ["data_schema_check", "ablation_study", "reproducibility_manifest"]
+    }
+  ],
+  "candidate_methods": ["integer_programming", "pareto_front", "scenario_analysis", "ablation_study"],
+  "cannot_copy_risks": ["只借鉴题型、验证和图表结构，不复制任何优秀论文正文或具体结果。"]
+}

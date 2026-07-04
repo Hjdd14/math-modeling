@@ -9,6 +9,9 @@
 - `results/` 是否包含结构化结果和图表。
 - 并行 Agent phase gate 是否在输出中被执行或明确记录。
 - 难题场景是否包含题意审计、baseline、动态专家、`validation_summary.json`、oracle/小例验证、敏感性分析和独立复现摘要。
+- 奖项级场景是否包含 `writer_prompt.md`、`innovation_register.json`、`judge_panel_review.json`、`compliance_record.json`，并明确不生成正式写作正文。
+- 权威竞赛资料库场景是否覆盖 MathorCup 大数据题、电工杯电力题、统计建模社会经济题、深圳杯工程题、研究生赛工业题、APMCM 综合题和五一杯规划题。
+- 每个资料库扩展 eval 必须检查：资料库检索、`case_retrieval.json`、模型选择、代码验证、图表证据和多评委审查。
 
 ## Claude 实跑 eval
 
@@ -34,7 +37,7 @@ python "tools/claude_eval_runner.py" --evals "evals/evals.json" --skill-path "."
 
 - 数学建模竞赛题。
 - PDF/DOCX 题目加 Excel/CSV 附件。
-- 需要建模报告、代码、图表、结果验证。
+- 需要建模方案、代码、图表、结果验证和写作交接提示词。
 - Python 或 MATLAB 实现。
 
 反例应覆盖：
@@ -43,4 +46,4 @@ python "tools/claude_eval_runner.py" --evals "evals/evals.json" --skill-path "."
 - 单纯 Excel 清洗。
 - PDF 翻译。
 - 只要求写一段代码。
-- 普通论文润色或排版。
+- 普通论文润色、排版或只要求写正式论文正文。

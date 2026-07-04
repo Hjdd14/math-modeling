@@ -18,14 +18,33 @@ REQUIRED_FILES = [
     "requirements.txt",
     "references/workflow.md",
     "references/tools.md",
+    "references/competition_sources.json",
+    "references/award_playbook.md",
+    "references/evaluator_panel.md",
     "tools/pipeline_check.py",
+    "tools/brief_completeness_checker.py",
+    "tools/source_registry_checker.py",
+    "tools/source_freshness_checker.py",
+    "tools/case_retrieval_checker.py",
+    "tools/award_readiness_checker.py",
     "tools/evidence_checker.py",
     "tools/schema_checker.py",
     "tools/model_spec_checker.py",
+    "tools/model_selection_checker.py",
+    "tools/optimization_certificate_checker.py",
+    "tools/uncertainty_budget_checker.py",
+    "tools/validation_profile_checker.py",
+    "tools/data_leakage_checker.py",
+    "tools/statistical_validation_checker.py",
     "tools/unit_checker.py",
     "tools/robustness_checker.py",
     "tools/figure_auditor.py",
-    "tools/report_auditor.py",
+    "tools/innovation_checker.py",
+    "tools/judge_panel_checker.py",
+    "tools/compliance_checker.py",
+    "tools/writer_prompt_checker.py",
+    "tools/mini_benchmark_checker.py",
+    "tools/mini_benchmark_runner.py",
     "tools/manifest_checker.py",
     "tools/solution_test_generator.py",
     "tools/workflow_runner.py",
@@ -34,7 +53,20 @@ REQUIRED_FILES = [
     "examples/quickstart/production_data.csv",
     "examples/solved-python/problem.md",
     "examples/solved-python/model_spec.json",
+    "examples/solved-python/model_selection_audit.json",
+    "examples/solved-python/optimization_certificate.json",
+    "examples/solved-python/uncertainty_budget.json",
+    "examples/solved-python/validation_profile.json",
+    "examples/solved-python/data_validation.json",
+    "examples/solved-python/statistical_validation.json",
+    "examples/solved-python/case_retrieval.json",
+    "examples/solved-python/writer_prompt.md",
+    "examples/solved-python/innovation_register.json",
+    "examples/solved-python/judge_panel_review.json",
+    "examples/solved-python/compliance_record.json",
     "examples/solved-python/results/validation_summary.json",
+    "evals/mini_contest_benchmark.json",
+    "evals/award_eval_review.json",
 ]
 
 RUNTIME_MODULES = {
@@ -144,7 +176,11 @@ def check_quickstart_example(root: Path) -> dict:
 
 def summarize(checks: list[dict]) -> dict:
     failed = [check for check in checks if not check["passed"] and check["severity"] == "error"]
-    warnings = [check for check in checks if not check["passed"] and check["severity"] == "warning"]
+    warnings = [
+        check
+        for check in checks
+        if check["severity"] == "warning" and (not check["passed"] or check.get("clean") is False)
+    ]
     return {
         "total": len(checks),
         "failed": len(failed),

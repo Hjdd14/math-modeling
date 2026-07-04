@@ -1,0 +1,29 @@
+{
+  "ai_usage": {
+    "used": true,
+    "tools": [
+      {"name": "Codex", "version": "GPT-5", "purpose": "工具链夹具与验证辅助"}
+    ],
+    "disclosure_required": true,
+    "human_reviewed": true
+  },
+  "anonymity": {"checked": true, "identity_terms_found": []},
+  "external_sources": [
+    {"source": "COMAP instructions", "citation_location": "writer_prompt.md#合规提示"}
+  ],
+  "reproducibility": {
+    "manifest": "reproducibility_manifest.json",
+    "commands": ["python solution.py"],
+    "input_hashes_recorded": true,
+    "output_hashes_recorded": true
+  },
+  "final_submission": {
+    "anonymity": true,
+    "ai_disclosure": true,
+    "citation_check": true,
+    "page_limit_checked": true,
+    "attachment_check": true,
+    "code_submission_note": "提交前复跑 solution.py，并随附必要代码与环境说明。",
+    "official_rules_reviewed": true
+  }
+}

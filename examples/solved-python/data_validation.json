@@ -1,0 +1,15 @@
+{
+  "task_type": "optimization",
+  "target": "profit",
+  "features": ["labor", "material", "carbon"],
+  "split": {
+    "type": "holdout",
+    "note": "确定性优化示例不训练预测模型，使用 oracle、baseline 和敏感性分析排查数据泄漏风险。"
+  },
+  "preprocessing": [
+    {
+      "name": "unit_normalization",
+      "fit_on": "train"
+    }
+  ]
+}

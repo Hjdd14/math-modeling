@@ -3,8 +3,8 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "我有一个数学建模竞赛题 PDF 和 data.xlsx 附件，请用 Python 完整完成建模、报告、代码、图表和验证。",
-      "expected_output": "生成 problem_brief.md、final_solution.json、model_decision.md、modeling_report.md、solution.py、results/ 和状态记忆文件。",
+      "prompt": "我有一个数学建模竞赛题 PDF 和 data.xlsx 附件，请用 Python 完整完成建模、写作交接、代码、图表和验证。",
+      "expected_output": "生成 problem_brief.md、final_solution.json、model_decision.md、writer_prompt.md、solution.py、results/ 和状态记忆文件。",
       "files": ["problem.pdf", "data.xlsx"],
       "assertions": ["必须执行 Phase 1 五视角并行 Agent", "必须记录并行批评和并行修正", "必须执行 Phase 4 并行审查"]
     },
@@ -26,7 +26,7 @@
       "id": 4,
       "prompt": "帮我验证这个已经写好的 Python 数学建模解答是否完整，重点看图表和结果目录。",
       "expected_output": "运行 pipeline_check.py 并报告失败项。",
-      "files": ["problem_brief.md", "modeling_report.md", "solution.py", "results/"],
+      "files": ["problem_brief.md", "writer_prompt.md", "solution.py", "results/"],
       "assertions": ["必须检查并行审查摘要", "必须验证 results/ 输出", "必须给出工具链结果"]
     },
     {
@@ -79,10 +79,10 @@
     {
       "id": 11,
       "category": "excellence_delivery",
-      "prompt": "请把这个多目标优化题做成一等奖级交付，要求报告、代码、图表、模型规范和数据契约全部可核查。",
-      "expected_output": "生成 model_spec.json、data_schema.json、symbol_table.json、solver_strategy.json、solution_tests.py 和严格验证结果。",
+      "prompt": "请把这个多目标优化题做成一等奖级交付，要求写作交接、代码、图表、模型规范和数据契约全部可核查。",
+      "expected_output": "生成 model_spec.json、data_schema.json、symbol_table.json、solver_strategy.json、solution_tests.py、writer_prompt.md 和严格验证结果。",
       "files": ["problem.pdf", "data.xlsx"],
-      "assertions": ["必须保留并行 Agent", "必须执行 Phase 2/3 并行文档与代码", "必须生成 model_spec.json", "必须生成 data_schema.json", "必须生成 solution_tests.py", "必须运行 pipeline_check.py --quality-mode excellence"]
+      "assertions": ["必须保留并行 Agent", "必须执行 Phase 2/3 写作交接与代码并行", "必须生成 model_spec.json", "必须生成 data_schema.json", "必须生成 solution_tests.py", "必须生成 writer_prompt.md", "必须生成 innovation_register.json", "必须运行 pipeline_check.py --quality-mode excellence"]
     },
     {
       "id": 12,
@@ -95,18 +95,98 @@
     {
       "id": 13,
       "category": "excellence_delivery",
-      "prompt": "请让图表达到出版级水平，每张图都要服务正文论证，并检查报告是否像高分论文。",
-      "expected_output": "生成 figure_style.json、figure_storyboard.md、results/figure_quality_report.json 和 report_quality_report.json。",
+      "prompt": "请让图表达到出版级水平，每张图都要服务核心结论，并把图表用途写进交接提示词。",
+      "expected_output": "生成 figure_style.json、figure_storyboard.md、results/figure_quality_report.json 和 writer_prompt.md 中的图表交接说明。",
       "files": ["problem.md", "data.csv"],
-      "assertions": ["必须保留可视化设计 Agent 与并行审查 Agent", "必须生成 figure_auditor.py 对应的 figure_quality_report.json", "必须生成 figure_storyboard.md", "必须运行 report_auditor.py", "必须在报告正文引用图表"]
+      "assertions": ["必须保留可视化设计 Agent 与并行审查 Agent", "必须生成 figure_auditor.py 对应的 figure_quality_report.json", "必须生成 figure_storyboard.md", "必须生成 writer_prompt.md", "必须不生成正式写作正文"]
     },
     {
       "id": 14,
       "category": "excellence_delivery",
       "prompt": "请模拟评委质询，给出可执行决策建议，并保证结果可复现。",
-      "expected_output": "生成 decision_insights.md、defense_questions.md、reproducibility_manifest.json，并通过质量模式检查。",
+      "expected_output": "生成 decision_insights.md、defense_questions.md、judge_panel_review.json、compliance_record.json、reproducibility_manifest.json，并通过质量模式检查。",
       "files": ["problem.pdf", "data.xlsx"],
-      "assertions": ["必须执行评委质询 Agent 并保留 Phase 4 并行审查", "必须生成 defense_questions.md", "必须生成 reproducibility_manifest.json", "必须运行 manifest_checker.py", "必须运行 pipeline_check.py --quality-mode excellence"]
+      "assertions": ["必须执行评委质询 Agent 并保留 Phase 4 并行审查", "必须生成 defense_questions.md", "必须生成 judge_panel_review.json", "必须生成 compliance_record.json", "必须生成 reproducibility_manifest.json", "必须运行 manifest_checker.py", "必须运行 pipeline_check.py --quality-mode excellence"]
+    },
+    {
+      "id": 15,
+      "category": "award_delivery",
+      "prompt": "请按冲击国赛一等奖/美赛 O 奖标准完成这个建模题，但不要写正式论文正文，只给后续写作 skill 的交接材料。",
+      "expected_output": "完成建模、代码、图表和验证证据，生成 writer_prompt.md、innovation_register.json、judge_panel_review.json 和 compliance_record.json。",
+      "files": ["problem.pdf", "data.xlsx"],
+      "assertions": ["必须保留并行 Agent", "必须不生成正式写作正文", "必须生成 writer_prompt.md", "必须生成 innovation_register.json", "必须生成 judge_panel_review.json", "必须生成 compliance_record.json"]
+    },
+    {
+      "id": 16,
+      "category": "award_delivery",
+      "prompt": "这个方案有几个看起来很高级的方法，请筛掉为了高级而高级的创新，只保留有 baseline 或消融证据的创新点。",
+      "expected_output": "生成 innovation_register.json，并用 innovation_checker.py 检查每个创新点的题目痛点、增益证据和失败风险。",
+      "files": ["problem.md", "data.csv"],
+      "assertions": ["必须保留并行 Agent", "必须执行创新筛选 Agent", "必须生成 innovation_register.json", "必须说明 baseline 增益或消融证据", "必须不生成正式写作正文"]
+    },
+    {
+      "id": 17,
+      "category": "award_delivery",
+      "prompt": "请让多位评委并行审查建模、代码、图表、复现和业务解释，并检查 AI 使用与匿名性。",
+      "expected_output": "生成 judge_panel_review.json 和 compliance_record.json，并通过 judge_panel_checker.py 与 compliance_checker.py。",
+      "files": ["problem.docx", "data.xlsx"],
+      "assertions": ["必须执行多评委并行审查", "必须生成 judge_panel_review.json", "必须包含 chair judge 汇总", "必须生成 compliance_record.json", "必须不生成正式写作正文"]
+    },
+    {
+      "id": 18,
+      "category": "competition_repository",
+      "prompt": "MathorCup 大数据题：附件是平台用户行为日志和商品表，请完成预测、聚类和业务指标解释。",
+      "expected_output": "优先检索 MathorCup 或行业大数据案例，生成 case_retrieval.json、模型方案、代码验证、图表证据和多评委审查。",
+      "files": ["mathorcup_bigdata.pdf", "logs.csv", "items.csv"],
+      "assertions": ["必须保留并行 Agent", "必须执行资料库检索并生成 case_retrieval.json", "必须优先命中 MathorCup 或大数据案例", "必须说明模型选择", "必须生成 results/validation_summary.json", "必须生成图表证据", "必须执行多评委审查"]
+    },
+    {
+      "id": 19,
+      "category": "competition_repository",
+      "prompt": "电工杯电力题：给出配电网节点、线路容量、负荷曲线和新能源出力，需要优化储能调度。",
+      "expected_output": "优先检索电工杯或电力相关案例，生成可验证的电力调度模型和约束检查。",
+      "files": ["eecmcm_power.docx", "grid_nodes.csv", "load.csv"],
+      "assertions": ["必须保留并行 Agent", "必须执行资料库检索并生成 case_retrieval.json", "必须优先命中电工杯或电力相关案例", "必须说明模型选择", "必须生成 results/validation_summary.json", "必须生成图表证据", "必须执行多评委审查"]
+    },
+    {
+      "id": 20,
+      "category": "competition_repository",
+      "prompt": "统计建模社会经济题：附件含问卷、抽样权重和地区社会经济指标，请完成统计推断和政策建议。",
+      "expected_output": "优先检索全国大学生统计建模大赛或数据洞察案例，生成调查质量控制、置信区间和稳健性验证。",
+      "files": ["statistics_modeling.pdf", "survey.csv", "regional_indicators.xlsx"],
+      "assertions": ["必须保留并行 Agent", "必须执行资料库检索并生成 case_retrieval.json", "必须优先命中统计建模大赛或数据洞察案例", "必须说明模型选择", "必须生成 results/validation_summary.json", "必须生成图表证据", "必须执行多评委审查"]
+    },
+    {
+      "id": 21,
+      "category": "competition_repository",
+      "prompt": "深圳杯工程题：需要根据实验数据估计芯片热弹性物理参数，并给出工程可解释的校准结果。",
+      "expected_output": "优先检索深圳杯工程案例，生成物理机理模型、参数可辨识性检查和工程图表。",
+      "files": ["shenzhen_engineering.md", "experiment.csv"],
+      "assertions": ["必须保留并行 Agent", "必须执行资料库检索并生成 case_retrieval.json", "必须优先命中深圳杯或工程案例", "必须说明模型选择", "必须生成 results/validation_summary.json", "必须生成图表证据", "必须执行多评委审查"]
+    },
+    {
+      "id": 22,
+      "category": "competition_repository",
+      "prompt": "研究生赛工业题：附件包含多传感器时序数据和设备状态，需要诊断异常并给出维修策略。",
+      "expected_output": "优先检索研究生赛工业或复杂系统案例，生成可复现的异常诊断、baseline 和消融验证。",
+      "files": ["npmcm_industrial.pdf", "sensor.csv"],
+      "assertions": ["必须保留并行 Agent", "必须执行资料库检索并生成 case_retrieval.json", "必须优先命中研究生赛或工业案例", "必须说明模型选择", "必须生成 results/validation_summary.json", "必须生成图表证据", "必须执行多评委审查"]
+    },
+    {
+      "id": 23,
+      "category": "competition_repository",
+      "prompt": "APMCM 综合题：题目包含时间序列预测、资源配置和政策解释，请完成混合建模。",
+      "expected_output": "检索 APMCM 或综合应用案例，说明哪些方法可借鉴、哪些不能照搬。",
+      "files": ["apmcm_composite.docx", "data.xlsx"],
+      "assertions": ["必须保留并行 Agent", "必须执行资料库检索并生成 case_retrieval.json", "必须优先命中 APMCM 或综合应用案例", "必须说明模型选择", "必须生成 results/validation_summary.json", "必须生成图表证据", "必须执行多评委审查"]
+    },
+    {
+      "id": 24,
+      "category": "competition_repository",
+      "prompt": "五一杯规划题：给出供应点、需求点、运输成本和服务时限，需要给出配送规划和敏感性分析。",
+      "expected_output": "检索五一杯规划或网络流案例，生成可行性检查、路径图和敏感性验证。",
+      "files": ["51mcm_planning.pdf", "supply.csv", "demand.csv"],
+      "assertions": ["必须保留并行 Agent", "必须执行资料库检索并生成 case_retrieval.json", "必须优先命中五一杯或规划调度案例", "必须说明模型选择", "必须生成 results/validation_summary.json", "必须生成图表证据", "必须执行多评委审查"]
     }
   ]
 }

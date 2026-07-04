@@ -1,0 +1,19 @@
+{
+  "innovations": [
+    {
+      "id": "I1",
+      "claim": "用小规模枚举 oracle 校验线性规划解",
+      "problem_pain_point": "工具链夹具需要证明代码输出和模型约束一致",
+      "baseline_gain": {
+        "metric": "validation_confidence",
+        "delta": 0.1,
+        "evidence": "results/validation_summary.json"
+      },
+      "implementation_cost": "low",
+      "interpretability": "枚举结果可以直接和 solver 输出对比",
+      "verification_evidence": ["baseline_comparison", "oracle_tests", "solver_cross_checks"],
+      "failure_risk": "只适用于小规模校验，不替代大规模求解证明",
+      "decision": "accepted"
+    }
+  ]
+}

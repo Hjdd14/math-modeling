@@ -1,0 +1,265 @@
+{
+  "version": "2026-06-27",
+  "purpose": "权威数学建模竞赛案例库来源总索引。只登记可核验入口、题型启发、评审线索和案例材料类型，不复制参赛作品全文。",
+  "trust_rules": [
+    "官方入口优先，其次学校通知或竞赛承办方，再次赛氪等竞赛平台。",
+    "第三方整理资料只能作为待核验线索，不得进入 tier_a 方法卡。",
+    "如果某比赛没有稳定公开优秀作品，只记录赛题、题型、规则、获奖名单或点评信息，不生成强方法卡。",
+    "方法卡只提炼题型、模型套路、验证方式、代码结构和图表证据，避免版权风险和过拟合。"
+  ],
+  "tiers": {
+    "tier_a": [
+      {
+        "name": "高教社杯全国大学生数学建模竞赛 CUMCM",
+        "tier": "tier_a",
+        "organizer": "全国大学生数学建模竞赛组委会，中国工业与应用数学学会等",
+        "official_url": "https://dxs.moe.gov.cn/zx/hd/sxjm/sxjmlw/",
+        "secondary_urls": [
+          "https://dxs.moe.gov.cn/zx/hd/sxjm/sxjmlw/qkt_sxjm_lw_lwzs.shtml",
+          "https://www.cmathc.org.cn/"
+        ],
+        "years_covered": {
+          "from": 2012,
+          "to": 2025,
+          "notes": "中国大学生在线长期展示入口与大学生数学竞赛网通知、获奖名单互相核验。"
+        },
+        "case_material_type": ["优秀论文展示", "赛题", "获奖名单", "章程评阅规范", "AI 工具使用规定"],
+        "suitable_problem_types": ["优化调度", "预测统计", "图网络", "物理机理", "政策决策", "多目标鲁棒"],
+        "trust_notes": "官方性强、覆盖时间长，是国内本科数学建模评审标准与结果表达的核心参照。"
+      },
+      {
+        "name": "中国研究生数学建模竞赛 / 华为杯 NPMCM",
+        "tier": "tier_a",
+        "organizer": "中国研究生创新实践系列大赛相关组织单位，以当年官方通知为准",
+        "official_url": "https://cpipc.acge.org.cn/cw/hp/4",
+        "secondary_urls": [
+          "https://www.cmathc.org.cn/cpmcm/lw/529.html"
+        ],
+        "years_covered": {
+          "from": 2004,
+          "to": 2026,
+          "notes": "赛事平台记录历届新闻与竞赛信息，优秀作品汇总需逐条核验来源页。"
+        },
+        "case_material_type": ["赛题", "优秀作品汇总", "获奖名单", "赛事新闻"],
+        "suitable_problem_types": ["工业优化", "大规模算法", "复杂系统", "预测统计", "机器学习混合"],
+        "trust_notes": "题目常偏工业和研究生层次，适合作为复杂建模、算法实现和工程解释参照。"
+      },
+      {
+        "name": "全国大学生统计建模大赛",
+        "tier": "tier_a",
+        "organizer": "中国统计教育学会",
+        "official_url": "http://tjjmds.ai-learning.net/",
+        "secondary_urls": [
+          "http://tjjmds.ai-learning.net/dstz/37047.jhtml"
+        ],
+        "years_covered": {
+          "from": 2015,
+          "to": 2026,
+          "notes": "以大赛官网通知、主题解读、国赛获奖名单和承办院校通知交叉核验。"
+        },
+        "case_material_type": ["竞赛通知", "主题解读", "数据资源说明", "获奖名单", "论文规范"],
+        "suitable_problem_types": ["统计调查", "预测统计", "社会经济数据", "政策决策", "数据洞察"],
+        "trust_notes": "统计调查、抽样、社会经济分析和实证检验题优先参考该来源。"
+      },
+      {
+        "name": "MathorCup 数学应用挑战赛及大数据竞赛",
+        "tier": "tier_a",
+        "organizer": "中国优选法统筹法与经济数学研究会",
+        "official_url": "https://www.mathorcup.org/",
+        "secondary_urls": [
+          "https://www.mathorcup.org/detail/2394",
+          "https://www.mathorcup.org/notice",
+          "https://www.mathorcup.org/prize"
+        ],
+        "years_covered": {
+          "from": 2011,
+          "to": 2026,
+          "notes": "官网包含通知、获奖名单、历年赛题和部分优秀论文入口。"
+        },
+        "case_material_type": ["赛题", "优秀论文入口", "大数据竞赛材料", "获奖名单", "通知"],
+        "suitable_problem_types": ["行业数据", "机器学习混合", "预测统计", "优化调度", "大数据工程"],
+        "trust_notes": "适合行业数据、平台数据和大数据竞赛题；需区分数学应用挑战赛和大数据竞赛。"
+      },
+      {
+        "name": "中国电机工程学会杯全国大学生电工数学建模竞赛",
+        "tier": "tier_a",
+        "organizer": "中国电机工程学会，电工数学专委会，东北电力大学等",
+        "official_url": "https://shumo.neepu.edu.cn/",
+        "secondary_urls": [
+          "https://www.cmathc.org.cn/mcm/tz/433.html",
+          "https://www.csee.org.cn/portal/xfptzgg/20230522/30852.html"
+        ],
+        "years_covered": {
+          "from": 2009,
+          "to": 2026,
+          "notes": "官网含历届竞赛、历届赛题、获奖名单和论文规范。"
+        },
+        "case_material_type": ["历届赛题", "获奖名单", "参赛规则", "论文规范", "通知"],
+        "suitable_problem_types": ["电力电工", "物理机理", "优化调度", "图网络", "随机仿真"],
+        "trust_notes": "电力、电路、电磁场、电机、负荷和能源系统题应优先检索该来源。"
+      },
+      {
+        "name": "深圳杯数学建模挑战赛",
+        "tier": "tier_a",
+        "organizer": "深圳市尚龙数学技术与交叉学科产业化研发中心等",
+        "official_url": "https://www.m2ct.org/",
+        "secondary_urls": [
+          "https://www.m2ct.org/modular-list.jsp?menuType=flowUp&pageType=smxly",
+          "https://dxs.moe.gov.cn/zx/hd/sxjm/sxjmlw/szbsxjmtzslw/",
+          "https://www.cmathc.org.cn/mcm/news/394.html"
+        ],
+        "years_covered": {
+          "from": 2016,
+          "to": 2026,
+          "notes": "官网含课题发布、活动动态和论文图解；中国大学生在线有深圳杯论文展示入口。"
+        },
+        "case_material_type": ["课题发布", "评审总结", "论文展示", "工程题说明"],
+        "suitable_problem_types": ["工程建模", "物理机理", "政策决策", "多目标鲁棒", "机器学习混合"],
+        "trust_notes": "工程真实问题和跨学科挑战较强，适合作为实际约束、解释性和结果可执行性参照。"
+      },
+      {
+        "name": "COMAP MCM/ICM",
+        "tier": "tier_a",
+        "organizer": "COMAP",
+        "official_url": "https://www.contest.comap.com/undergraduate/contests/mcm/previous-contests.php",
+        "secondary_urls": [
+          "https://www.contest.comap.com/undergraduate/contests/mcm/instructions.php",
+          "https://www.comap.com/contests/mcm-icm"
+        ],
+        "years_covered": {
+          "from": 2018,
+          "to": 2026,
+          "notes": "previous contests、results、instructions 和 FAQ 用于国际题型、O/F 奖与合规标准参考。"
+        },
+        "case_material_type": ["previous contests", "results", "Outstanding papers入口", "instructions", "FAQ"],
+        "suitable_problem_types": ["开放式政策", "预测统计", "网络传播", "随机仿真", "多目标鲁棒", "论文表达"],
+        "trust_notes": "作为国际标杆；只借鉴 problem analysis、thought process、modeling approaches 和验证结构。"
+      }
+    ],
+    "tier_b": [
+      {
+        "name": "APMCM 亚太地区大学生数学建模竞赛中文赛项",
+        "tier": "tier_b",
+        "organizer": "亚太地区大学生数学建模竞赛组委会",
+        "official_url": "https://www.apmcm.org/",
+        "secondary_urls": [
+          "https://www.apmcm.org/list/problems",
+          "https://www.apmcm.org/list/introduction"
+        ],
+        "years_covered": {
+          "from": 2011,
+          "to": 2026,
+          "notes": "官网保留竞赛简介和题目入口，部分报名信息跳转赛氪。"
+        },
+        "case_material_type": ["竞赛简介", "竞赛题目", "通知", "报名入口"],
+        "suitable_problem_types": ["综合应用", "预测统计", "优化调度", "机器学习混合"],
+        "trust_notes": "题型训练价值高，但优秀作品公开完整度不稳定；方法卡需逐条核验。"
+      },
+      {
+        "name": "五一数学建模竞赛",
+        "tier": "tier_b",
+        "organizer": "中国矿业大学，江苏省工业与应用数学学会，徐州市工业与应用数学学会",
+        "official_url": "https://51mcm.cumt.edu.cn/bjjs/list.htm",
+        "secondary_urls": [
+          "https://51mcm.cumt.edu.cn/14056/list.htm"
+        ],
+        "years_covered": {
+          "from": 2004,
+          "to": 2026,
+          "notes": "官网含当届竞赛、历届赛题、获奖名单和违纪通报。"
+        },
+        "case_material_type": ["历届赛题", "获奖名单", "参赛通知", "评选结果"],
+        "suitable_problem_types": ["规划调度", "预测统计", "综合应用", "校内选拔"],
+        "trust_notes": "适合作为国赛前训练题谱，但公开优秀作品材料有限。"
+      },
+      {
+        "name": "认证杯数学中国数学建模国际赛 / 数学中国网络挑战赛",
+        "tier": "tier_b",
+        "organizer": "认证杯数学中国数学建模国际赛组委会，数学中国相关平台",
+        "official_url": "http://mcm.tzmcm.cn/index.html",
+        "secondary_urls": [
+          "http://www.tzmcm.cn/index.html"
+        ],
+        "years_covered": {
+          "from": 2008,
+          "to": 2026,
+          "notes": "以赛事官网为准，论坛内容只作为待核验线索。"
+        },
+        "case_material_type": ["竞赛通知", "赛题发布", "论坛线索", "证书查询说明"],
+        "suitable_problem_types": ["国际赛训练", "综合建模", "预测统计", "政策决策"],
+        "trust_notes": "可用于训练开放式综合题；论坛和第三方帖子不得直接进入 tier_a 方法卡。"
+      },
+      {
+        "name": "华中杯大学生数学建模挑战赛",
+        "tier": "tier_b",
+        "organizer": "湖北省工业与应用数学学会等",
+        "official_url": "https://www.hzbmmc.com/",
+        "secondary_urls": [
+          "https://www.hzbmmc.com/views/award/award.html?navigate=award",
+          "https://www.hzbmmc.com/views/inform/inform.html?navigate=inform",
+          "https://www.saikr.com/vse/53501"
+        ],
+        "years_covered": {
+          "from": 2010,
+          "to": 2026,
+          "notes": "以官网新闻、通知和竞赛详情为准。"
+        },
+        "case_material_type": ["竞赛通知", "赛题", "获奖信息"],
+        "suitable_problem_types": ["综合应用", "优化调度", "预测统计"],
+        "trust_notes": "训练价值较高，公开材料完整度需逐年核验。"
+      },
+      {
+        "name": "中青杯全国大学生数学建模竞赛",
+        "tier": "tier_b",
+        "organizer": "中青杯全国大学生数学建模竞赛组委会",
+        "official_url": "http://www.cycmcm.com/",
+        "secondary_urls": [],
+        "years_covered": {
+          "from": 2019,
+          "to": 2026,
+          "notes": "官网有竞赛详情、组织、时间和查询入口。"
+        },
+        "case_material_type": ["竞赛详情", "通知", "查询入口", "赛题"],
+        "suitable_problem_types": ["综合训练", "预测统计", "优化调度"],
+        "trust_notes": "可作为训练谱系；不把非官方搬运的获奖论文作为权威材料。"
+      },
+      {
+        "name": "华数杯全国大学生数学建模竞赛",
+        "tier": "tier_b",
+        "organizer": "华数杯数学建模竞赛组委会，天津市未来与预测科学研究会等",
+        "official_url": "https://m.saikr.com/vse/chinamcm26",
+        "secondary_urls": [
+          "https://www.saikr.com/vse/chinamcm/2026",
+          "https://m.saikr.com/contest/notice_detail/44347",
+          "https://m.saikr.com/contest/notice_detail/39346"
+        ],
+        "years_covered": {
+          "from": 2020,
+          "to": 2026,
+          "notes": "当前稳定公开入口主要在赛氪报名与竞赛详情页，需按年份核验。"
+        },
+        "case_material_type": ["竞赛详情", "报名通知", "赛题说明", "获奖线索"],
+        "suitable_problem_types": ["国赛模拟", "优化调度", "预测统计", "综合应用"],
+        "trust_notes": "可作为赛前模拟训练；平台入口不是优秀作品权威库，方法卡应谨慎。"
+      },
+      {
+        "name": "数维杯大学生数学建模挑战赛",
+        "tier": "tier_b",
+        "organizer": "数维杯大学生数学建模挑战赛组委会，内蒙古创新教育学会等",
+        "official_url": "https://www.nmmcm.org.cn/",
+        "secondary_urls": [
+          "https://www.saikr.com/vse/57752"
+        ],
+        "years_covered": {
+          "from": 2015,
+          "to": 2026,
+          "notes": "官网和比赛详情页用于核验春季赛、秋季赛和挑战赛信息。"
+        },
+        "case_material_type": ["竞赛详情", "赛题", "通知", "获奖线索"],
+        "suitable_problem_types": ["综合训练", "预测统计", "优化调度", "机器学习混合"],
+        "trust_notes": "参赛规模大，训练价值高；公开材料需要区分官网、报名平台和第三方转载。"
+      }
+    ],
+    "tier_c": []
+  }
+}

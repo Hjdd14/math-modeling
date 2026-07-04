@@ -1,0 +1,105 @@
+{
+  "workspace": "tests\\test_data",
+  "mode": "excellence",
+  "path": "tests\\test_data\\writer_prompt.md",
+  "quality_report_path": "tests\\test_data\\writer_prompt_quality.json",
+  "passed": true,
+  "warning": false,
+  "sections_found": 7,
+  "checks": [
+    {
+      "name": "section_problem",
+      "passed": true,
+      "aliases": [
+        "题目",
+        "小问",
+        "评分"
+      ]
+    },
+    {
+      "name": "section_model",
+      "passed": true,
+      "aliases": [
+        "模型",
+        "方案",
+        "主线"
+      ]
+    },
+    {
+      "name": "section_code_results",
+      "passed": true,
+      "aliases": [
+        "代码",
+        "结果"
+      ]
+    },
+    {
+      "name": "section_figures",
+      "passed": true,
+      "aliases": [
+        "图表",
+        "可视化"
+      ]
+    },
+    {
+      "name": "section_evidence",
+      "passed": true,
+      "aliases": [
+        "验证",
+        "证据"
+      ]
+    },
+    {
+      "name": "section_compliance",
+      "passed": true,
+      "aliases": [
+        "合规",
+        "匿名",
+        "AI"
+      ]
+    },
+    {
+      "name": "section_submission_review",
+      "passed": true,
+      "aliases": [
+        "后续写作",
+        "提交复核",
+        "官方规则"
+      ]
+    },
+    {
+      "name": "required_handoff_references",
+      "passed": true,
+      "missing": []
+    },
+    {
+      "name": "cn_risk_compliance_terms",
+      "passed": true,
+      "missing": []
+    },
+    {
+      "name": "handoff_boundary",
+      "passed": true
+    },
+    {
+      "name": "submission_review_checklist",
+      "passed": true,
+      "missing": []
+    },
+    {
+      "name": "figure_claim_handoff",
+      "passed": true,
+      "missing": []
+    },
+    {
+      "name": "no_formal_body_request",
+      "passed": true
+    },
+    {
+      "name": "anonymity_screen",
+      "passed": true,
+      "hits": []
+    }
+  ],
+  "issues": []
+}

@@ -1,0 +1,25 @@
+{
+  "holdout": {
+    "method": "known_case",
+    "passed": true
+  },
+  "metrics": {
+    "MAE": 0.0,
+    "RMSE": 0.0
+  },
+  "residuals": {
+    "checked": true,
+    "passed": true
+  },
+  "intervals": {
+    "level": 0.95,
+    "passed": true
+  },
+  "robustness": {
+    "passed": true
+  },
+  "overfitting_risk": {
+    "level": "low",
+    "passed": true
+  }
+}

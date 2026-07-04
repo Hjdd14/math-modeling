@@ -25,7 +25,7 @@ def test_python_template_defines_main_before_calling_it():
 
 
 def test_parallel_phase_uses_final_solution_not_phase2_report_dependency():
-    """测试：并行代码 Agent 不得依赖 Phase 2 已写出的报告作为输入"""
+    """测试：并行代码 Agent 不得依赖 Phase 2 写作交接作为输入"""
     workflow_path = os.path.join(SKILL_DIR, "references", "workflow.md")
     with open(workflow_path, "r", encoding="utf-8") as f:
         workflow = f.read()
@@ -35,7 +35,7 @@ def test_parallel_phase_uses_final_solution_not_phase2_report_dependency():
     assert "final_solution.json" in phase3_step
     assert "problem_brief.md" in phase3_step
     assert "不等待 Phase 2" in phase3_step
-    assert "读取 Phase 2 创建的 `modeling_report.md`" not in phase3_step
+    assert "正式写作正文" not in phase3_step
 
 
 def test_tool_output_docs_include_new_failure_fields():
@@ -56,6 +56,7 @@ def test_skill_doc_is_short_and_points_to_references():
     assert "references/workflow.md" in content
     assert "references/templates.md" in content
     assert "references/tools.md" in content
+    assert "references/competition_sources.json" in content
     assert "references/evals.md" in content
 
 
@@ -116,8 +117,8 @@ def test_dynamic_experts_are_additive_not_replacements():
     assert "不能替换" in workflow
 
 
-def test_phase1_outputs_decision_files_not_modeling_report():
-    """测试：Phase 1 只输出决策产物，报告由 Phase 2 生成"""
+def test_phase1_outputs_decision_files_not_formal_body():
+    """测试：Phase 1 只输出决策产物，不生成正式写作正文"""
     workflow_path = os.path.join(SKILL_DIR, "references", "workflow.md")
     with open(workflow_path, "r", encoding="utf-8") as f:
         workflow = f.read()
@@ -126,7 +127,7 @@ def test_phase1_outputs_decision_files_not_modeling_report():
     phase1 = phase1_match.group(0)
     assert "final_solution.json" in phase1
     assert "model_decision.md" in phase1
-    assert "不得写入 `modeling_report.md`" in phase1
+    assert "不生成正式写作正文" in phase1
 
 
 def test_1_2_excellence_delivery_gates_are_documented():
@@ -155,15 +156,70 @@ def test_1_2_excellence_delivery_gates_are_documented():
         "figure_style.json",
         "figure_auditor.py",
         "figure_storyboard.md",
-        "report_auditor.py",
+        "writer_prompt.md",
+        "case_retrieval.json",
+        "innovation_register.json",
+        "judge_panel_review.json",
+        "compliance_record.json",
+        "source_registry_checker.py",
+        "case_retrieval_checker.py",
+        "award_readiness_checker.py",
+        "writer_prompt_checker.py",
+        "innovation_checker.py",
+        "judge_panel_checker.py",
+        "compliance_checker.py",
         "scoring_strategy.md",
         "ablation_study.json",
         "decision_insights.md",
         "defense_questions.md",
         "可视化设计 Agent",
-        "竞赛论文表现力 Agent",
+        "多评委并行审查",
         "评委质询 Agent",
         "--quality-mode",
     ]
     for term in required_terms:
         assert term in combined
+
+
+def test_skill_boundary_outputs_writer_prompt_not_formal_report_body():
+    """测试：skill 边界必须转向建模代码交付与写作交接提示词"""
+    content = read_skill_doc()
+    workflow_path = os.path.join(SKILL_DIR, "references", "workflow.md")
+    templates_path = os.path.join(SKILL_DIR, "references", "templates.md")
+    with open(workflow_path, "r", encoding="utf-8") as f:
+        workflow = f.read()
+    with open(templates_path, "r", encoding="utf-8") as f:
+        templates = f.read()
+    combined = "\n".join([content, workflow, templates])
+
+    assert "writer_prompt.md" in combined
+    assert "不生成正式写作正文" in combined
+    assert "写作交接提示词" in combined
+
+    fixed_product_match = re.search(r"## 固定产物[\s\S]*?## 执行入口", content)
+    assert fixed_product_match is not None
+    fixed_products = fixed_product_match.group(0)
+    assert "writer_prompt.md" in fixed_products
+    assert "modeling_report.md" not in fixed_products
+
+
+def test_award_playbook_and_evaluator_panel_references_exist():
+    """测试：奖项级方法谱系与评委组参考必须可发现"""
+    sources_path = os.path.join(SKILL_DIR, "references", "competition_sources.json")
+    award_path = os.path.join(SKILL_DIR, "references", "award_playbook.md")
+    panel_path = os.path.join(SKILL_DIR, "references", "evaluator_panel.md")
+    assert os.path.exists(sources_path)
+    assert os.path.exists(award_path)
+    assert os.path.exists(panel_path)
+
+    with open(award_path, "r", encoding="utf-8") as f:
+        award = f.read()
+    with open(panel_path, "r", encoding="utf-8") as f:
+        panel = f.read()
+
+    for phrase in ["2012-2025", "2018-2026", "国赛展示", "COMAP"]:
+        assert phrase in award
+    for problem_type in ["优化调度", "预测统计", "图网络路径", "随机仿真", "物理机理", "政策决策", "多目标鲁棒", "机器学习混合"]:
+        assert problem_type in award
+    for judge in ["国赛建模评委", "美赛评委", "代码复现评委", "图表证据评委", "工程/业务解释评委", "chair judge"]:
+        assert judge in panel

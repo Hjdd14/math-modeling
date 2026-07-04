@@ -1,0 +1,23 @@
+{
+  "review_method": "skill-creator eval viewer",
+  "comparison_targets": {
+    "old_skill": "pre-award-boundary math-modeling output",
+    "new_skill": "award-level modeling-code-handoff output"
+  },
+  "benchmark": "evals/mini_contest_benchmark.json",
+  "rubric": [
+    {"name": "problem_understanding", "max_score": 20, "evidence": ["problem_brief.md", "ambiguity_register.json"]},
+    {"name": "modeling_quality", "max_score": 20, "evidence": ["final_solution.json", "model_spec.json", "innovation_register.json"]},
+    {"name": "code_correctness", "max_score": 20, "evidence": ["solution.py", "solution_tests.py", "results/validation_summary.json"]},
+    {"name": "oracle_validation", "max_score": 20, "evidence": ["mini_contest_benchmark.json", "results/validation_summary.json"]},
+    {"name": "handoff_and_compliance", "max_score": 20, "evidence": ["writer_prompt.md", "writer_prompt_quality.json", "compliance_record.json"]}
+  ],
+  "review_steps": [
+    "Run tools/mini_benchmark_checker.py --benchmark evals/mini_contest_benchmark.json --mode strict.",
+    "Run old and new skill outputs through the same benchmark prompts.",
+    "Open both output sets in skill-creator eval viewer.",
+    "Score each rubric item with concrete file evidence, not narrative claims.",
+    "Record unresolved gaps before considering release."
+  ],
+  "status": "ready_for_human_eval"
+}

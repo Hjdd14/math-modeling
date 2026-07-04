@@ -106,13 +106,15 @@ def check_model_spec(workspace: str, mode: str = "standard") -> dict:
         if isinstance(constraint, dict) and not (constraint.get("expression") or constraint.get("formula")):
             _add_issue(issues, "missing_constraint_expression", "约束缺少 expression/formula。", constraint=constraint.get("name"))
 
-    report_text = ""
+    handoff_text = ""
     code_text = ""
-    report_path = root / "modeling_report.md"
+    model_decision_path = root / "model_decision.md"
+    writer_prompt_path = root / "writer_prompt.md"
     code_path = root / "solution.py"
     matlab_path = root / "solution.m"
-    if report_path.exists():
-        report_text = report_path.read_text(encoding="utf-8", errors="ignore")
+    for doc_path in [model_decision_path, writer_prompt_path]:
+        if doc_path.exists():
+            handoff_text += "\n" + doc_path.read_text(encoding="utf-8", errors="ignore")
     if code_path.exists():
         code_text = code_path.read_text(encoding="utf-8", errors="ignore")
     elif matlab_path.exists():
@@ -125,10 +127,10 @@ def check_model_spec(workspace: str, mode: str = "standard") -> dict:
             continue
         name = variable.get("name")
         code_name = variable.get("code_name") or name
-        in_report = _contains_word(report_text, name) if report_text else True
+        in_handoff = _contains_word(handoff_text, name) if handoff_text else True
         in_code = _contains_word(code_text, code_name) if code_text else True
-        referenced.append({"name": name, "in_report": in_report, "in_code": in_code})
-        if not in_report or not in_code:
+        referenced.append({"name": name, "in_handoff": in_handoff, "in_code": in_code})
+        if not in_handoff or not in_code:
             unreferenced.append(name)
 
     checks.append({"name": "variable_references", "passed": not unreferenced, "details": referenced})
@@ -136,7 +138,7 @@ def check_model_spec(workspace: str, mode: str = "standard") -> dict:
         _add_issue(
             issues,
             "model_spec_symbol_not_referenced",
-            f"变量 {name} 未同时出现在报告和代码中。",
+            f"变量 {name} 未同时出现在写作交接材料和代码中。",
             "warning",
             variable=name,
         )

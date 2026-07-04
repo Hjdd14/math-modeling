@@ -20,7 +20,7 @@ ARTIFACT_FILES = {
     "modeling_memory": "modeling_memory.md",
     "final_solution": "final_solution.json",
     "model_decision": "model_decision.md",
-    "modeling_report": "modeling_report.md",
+    "writer_prompt": "writer_prompt.md",
     "results_dir": "results",
 }
 PHASE_ORDER = ["phase0", "phase1", "phase2", "phase3", "phase4", "phase5"]
@@ -76,7 +76,7 @@ class StateLock:
                 self.fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_RDWR)
                 os.write(self.fd, payload)
                 return self
-            except FileExistsError:
+            except (FileExistsError, PermissionError):
                 self._remove_stale_lock()
                 if time.monotonic() >= deadline:
                     raise TimeoutError(f"等待状态文件锁超时: {self.path}")
@@ -88,7 +88,7 @@ class StateLock:
             self.fd = None
         try:
             self.path.unlink()
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             pass
 
     def _remove_stale_lock(self):
@@ -96,7 +96,7 @@ class StateLock:
             age = time.time() - self.path.stat().st_mtime
             if age > LOCK_STALE_SECONDS:
                 self.path.unlink()
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             pass
 
 
@@ -181,7 +181,7 @@ def inspect_workspace(workspace: str, language: str = "python", base_state: dict
         state["artifacts"][name] = artifact_info_for_workspace(workspace, rel)
 
     inferred_phase = "phase0"
-    if state["artifacts"].get("modeling_report", {}).get("exists"):
+    if state["artifacts"].get("writer_prompt", {}).get("exists"):
         inferred_phase = "phase2"
     if state["artifacts"].get("solution", {}).get("exists"):
         inferred_phase = "phase3"

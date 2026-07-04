@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "name": "COMAP previous contests",
+      "url": "https://www.contest.comap.com/undergraduate/contests/mcm/previous-contests.php",
+      "years": [2025, 2026],
+      "tier": "official",
+      "checked_at": "2026-06-28"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "name": "MathorCup official",
+      "url": "https://www.mathorcup.org/",
+      "years": [2025, 2026],
+      "tier": "official",
+      "checked_at": "2026-06-28"
+    }
+  ]
+}

@@ -2,9 +2,23 @@
 
 ## Unreleased
 
-- 规划为 `1.2.0`：新增一等奖级交付质量闭环，包括 `model_spec.json`、`data_schema.json`、`symbol_table.json`、`solver_strategy.json`、`solution_tests.py`、`figure_style.json`、`figure_storyboard.md`、`report_quality_report.json`、`decision_insights.md`、`defense_questions.md` 和 `reproducibility_manifest.json`。
-- 新增 `tools/schema_checker.py`、`tools/model_spec_checker.py`、`tools/unit_checker.py`、`tools/robustness_checker.py`、`tools/figure_auditor.py`、`tools/report_auditor.py`、`tools/manifest_checker.py` 和 `tools/solution_test_generator.py`。
-- `tools/pipeline_check.py` 新增 `--quality-mode standard|strict|hard|complete|full|excellence`，默认 standard 兼容旧工作区，excellence 要求完整模型、数据、代码、图表、报告和复现证据链。
+- 新增 `award_readiness_checker.py` 并接入 excellence pipeline，用于硬审计 `ambiguity_register.json`、`assumption_ledger.md`、`scoring_strategy.md`、`ablation_study.json`、`decision_insights.md` 和 `defense_questions.md`，防止高风险歧义、评分策略、消融证据、决策解释或评委质询准备缺失时仍被放行。
+- 新增奖项级 excellence gate：`brief_completeness_checker.py`、`model_selection_checker.py`、`optimization_certificate_checker.py`、`uncertainty_budget_checker.py`、`validation_profile_checker.py`、`data_leakage_checker.py`、`statistical_validation_checker.py`、`source_freshness_checker.py` 和 `mini_benchmark_runner.py`，并接入 `pipeline_check.py --quality-mode excellence`、CI 与 release checklist。
+- 强化图表、合规和复现：`figure_storyboard.md` 每图必须含 `file`、`claim`、`source_data`、`x_unit`、`y_unit`、`supports_question`；`writer_prompt.md` 必须交接每图结论和提交复核清单；`compliance_record.json` 检查匿名、AI 披露、引用、页数、附件、代码提交和官方规则；`reproducibility_manifest.json` 增加 OS、求解器、随机库、耗时和输入/输出 hash。
+- `solution_test_generator.py` 与 `robustness_checker.py` 统一奖项级阈值：随机种子至少 3 个、多初值至少 3 次、bootstrap/置信区间置信水平至少 0.95；`code_runner.py` 改为递归追踪结果文件和 sha256。
+- 新增 `references/competition_sources.json`，把资料库扩展为权威竞赛来源分层索引，首版覆盖 7 个 tier_a 来源和 7 个 tier_b 来源，并记录官方入口、年份范围、材料类型和可信度说明。
+- 扩容 `references/award_playbook.md`，按比赛维度和 10 类题型沉淀 40 张方法卡；每张方法卡标注来源比赛、年份、题号、适用条件、误用风险、推荐验证和来源链接。
+- 新增 `tools/source_registry_checker.py`、`tools/case_retrieval_checker.py` 和 `tools/writer_prompt_checker.py`，并在 `pipeline_check.py --quality-mode excellence` 中纳入来源库、案例检索和写作交接提示词检查。
+- 新增 `case_retrieval.json` 为固定产物，用于记录相似题型、可借鉴模型、不能照搬风险和推荐验证；电工、统计调查、大数据题会检查首选来源是否匹配。
+- Eval 扩展覆盖 MathorCup 大数据题、电工杯电力题、统计建模社会经济题、深圳杯工程题、研究生赛工业题、APMCM 综合题和五一杯规划题。
+- 规划为奖项级建模与代码交付增强：正式流程不再生成正式写作正文，改为输出 `writer_prompt.md`，把模型、代码、结果、图表、验证证据、复现信息和合规注意事项交给后续写作 skill。
+- 新增 `references/award_playbook.md` 和 `references/evaluator_panel.md`，沉淀国赛/美赛题型方法谱系、验证方式、图表证据和多评委并行审查规则。
+- 新增 `tools/innovation_checker.py`、`tools/judge_panel_checker.py` 和 `tools/compliance_checker.py`，并在 `pipeline_check.py --quality-mode excellence` 中纳入创新筛选、多评委审查、合规记录和 `writer_prompt.md` 检查。
+- `tools/solution_test_generator.py` 生成的契约测试增加约束不变量、oracle、baseline 和随机种子稳定性检查。
+- `tools/robustness_checker.py` 在严格/卓越模式下检查约束残差、最优性 gap、多初值、随机种子数量、置信区间和扰动稳定性阈值，不再只信任 `passed=true`。
+- 规划为 `1.2.0`：新增奖项级交付质量闭环，包括 `model_spec.json`、`data_schema.json`、`symbol_table.json`、`solver_strategy.json`、`solution_tests.py`、`figure_style.json`、`figure_storyboard.md`、`writer_prompt.md`、`decision_insights.md`、`defense_questions.md` 和 `reproducibility_manifest.json`。
+- 新增 `tools/schema_checker.py`、`tools/model_spec_checker.py`、`tools/unit_checker.py`、`tools/robustness_checker.py`、`tools/figure_auditor.py`、`tools/manifest_checker.py` 和 `tools/solution_test_generator.py`。
+- `tools/pipeline_check.py` 新增 `--quality-mode standard|strict|hard|complete|full|excellence`，默认 standard 兼容增量工作区，excellence 要求完整模型、数据、代码、图表、写作交接和复现证据链。
 - 新增 `examples/solved-python/`，展示完整合成样例的理想产物结构，方便其他 Agent 和开源用户对齐输出。
 - 工作流新增问题拆解与评分策略 Agent、可视化设计 Agent、竞赛论文表现力 Agent、结果解释与决策建议 Agent、评委质询 Agent。
 - 规划为 `1.1.0`：新增难题准确性增强链路，包括题意审计、假设台账、题型分类、动态专家 Agent、baseline、模型评分矩阵、`validation_summary.json` 和独立复现 gate。

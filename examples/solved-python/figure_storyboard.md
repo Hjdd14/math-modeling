@@ -1,6 +1,9 @@
 # Figure Storyboard
 
-| 图表 | 回答的问题 | 数据来源 | 预期结论 | 报告位置 |
-|------|------------|----------|----------|----------|
-| result_resource_usage.png | 最优方案是否贴近资源瓶颈 | results/summary.json | 碳排和工时是关键约束 | 模型求解 |
-
+- file: result_resource_usage.png
+  claim: 碳排和工时是最优方案的关键资源瓶颈
+  source_data: results/summary.json
+  x_unit: 资源类别
+  y_unit: 利用率
+  supports_question: Q1-Q3
+  report_position: 模型求解

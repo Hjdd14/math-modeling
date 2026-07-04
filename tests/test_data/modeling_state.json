@@ -31,12 +31,12 @@
       "size": 165,
       "mtime": "2026-06-26T13:15:45.286521+00:00"
     },
-    "modeling_report": {
-      "path": "modeling_report.md",
+    "writer_prompt": {
+      "path": "writer_prompt.md",
       "exists": true,
       "kind": "file",
-      "size": 1627,
-      "mtime": "2026-06-26T13:17:01.310926+00:00"
+      "size": 2000,
+      "mtime": "2026-06-28T06:58:13.899678+00:00"
     },
     "results_dir": {
       "path": "results",
@@ -54,5 +54,5 @@
   "tool_runs": [],
   "agent_runs": [],
   "issues": [],
-  "updated_at": "2026-06-26T13:20:03.548743+00:00"
+  "updated_at": "2026-06-30T06:20:12.240189+00:00"
 }

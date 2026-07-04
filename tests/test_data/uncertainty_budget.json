@@ -1,0 +1,18 @@
+{
+  "data": {
+    "impact": "low",
+    "mitigation": "data_schema.json 检查字段、单位和缺失值。"
+  },
+  "parameter": {
+    "impact": "medium",
+    "sensitivity": "利润参数正负 5% 扰动后最优方案稳定。"
+  },
+  "model": {
+    "impact": "medium",
+    "evidence": "baseline_solution.json 和 optimization_certificate.json 支撑模型选择。"
+  },
+  "random": {
+    "impact": "low",
+    "evidence": "random_seed_stability 记录 3 个种子。"
+  }
+}

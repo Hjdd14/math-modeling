@@ -33,7 +33,7 @@ def test_extract_structure():
 def test_validate_model():
     """测试2：验证建模结果"""
     result = run_tool("validate", "--brief", os.path.join(TEST_DATA, "problem_brief.md"),
-                      "--stage", "model", "--target", os.path.join(TEST_DATA, "modeling_report.md"))
+                      "--stage", "model", "--target", os.path.join(TEST_DATA, "model_decision.md"))
     assert "passed" in result
     assert len(result["checks"]) > 0
 
@@ -41,9 +41,9 @@ def test_validate_model():
 def test_validate_document_alias_matches_model():
     """测试：document 阶段必须执行与 model 阶段相同的非空检查"""
     model_result = run_tool("validate", "--brief", os.path.join(TEST_DATA, "problem_brief.md"),
-                            "--stage", "model", "--target", os.path.join(TEST_DATA, "modeling_report.md"))
+                            "--stage", "model", "--target", os.path.join(TEST_DATA, "model_decision.md"))
     document_result = run_tool("validate", "--brief", os.path.join(TEST_DATA, "problem_brief.md"),
-                               "--stage", "document", "--target", os.path.join(TEST_DATA, "modeling_report.md"))
+                               "--stage", "document", "--target", os.path.join(TEST_DATA, "model_decision.md"))
 
     assert len(document_result["checks"]) > 0
     assert document_result["checks"] == model_result["checks"]
@@ -79,7 +79,7 @@ def test_validate_output():
 
 def test_report_generation():
     """测试5：报告生成"""
-    files_json = json.dumps({"model": os.path.join(TEST_DATA, "modeling_report.md")})
+    files_json = json.dumps({"model": os.path.join(TEST_DATA, "model_decision.md")})
     result = run_tool("report", "--brief", os.path.join(TEST_DATA, "problem_brief.md"),
                       "--files", files_json)
     assert "checks" in result
@@ -98,14 +98,14 @@ def test_missing_brief():
 def test_score_range():
     """测试7：评分范围"""
     result = run_tool("validate", "--brief", os.path.join(TEST_DATA, "problem_brief.md"),
-                      "--stage", "model", "--target", os.path.join(TEST_DATA, "modeling_report.md"))
+                      "--stage", "model", "--target", os.path.join(TEST_DATA, "model_decision.md"))
     assert 0 <= result["score"] <= 100
 
 
 def test_check_details():
     """测试8：检查项详情"""
     result = run_tool("validate", "--brief", os.path.join(TEST_DATA, "problem_brief.md"),
-                      "--stage", "model", "--target", os.path.join(TEST_DATA, "modeling_report.md"))
+                      "--stage", "model", "--target", os.path.join(TEST_DATA, "model_decision.md"))
     for check in result["checks"]:
         assert "item" in check
         assert "status" in check

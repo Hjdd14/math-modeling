@@ -1,6 +1,9 @@
 # Figure Storyboard
 
-| 图表 | 回答的问题 | 数据来源 | 预期结论 | 报告位置 |
-|------|------------|----------|----------|----------|
-| figure.png | 最优方案是否生成有效输出图 | results/output.csv | 结果图非空且可引用 | 模型求解 |
-
+- file: figure.png
+  claim: 最优方案生成了非空且可引用的结果图
+  source_data: results/output.csv
+  x_unit: 产品类别
+  y_unit: 件
+  supports_question: Q1-Q2
+  report_position: 模型求解

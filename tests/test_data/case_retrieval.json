@@ -1,0 +1,30 @@
+{
+  "problem_domain": "生产调度优化",
+  "matched_problem_types": ["优化调度", "多目标鲁棒", "预测统计"],
+  "matched_cases": [
+    {
+      "rank": 1,
+      "source_competition": "高教社杯全国大学生数学建模竞赛 CUMCM",
+      "year": "2024",
+      "problem_id": "B/C 类资源配置题",
+      "problem_type": "优化调度",
+      "similarity_reason": "同属资源约束下的生产排程、利润优化和可行性验证问题。",
+      "borrowable_methods": ["整数规划", "baseline 对照", "小规模枚举 oracle", "敏感性分析"],
+      "cannot_copy_risks": ["生产产品、资源口径和目标函数不同，不能照搬变量定义或参数。"],
+      "validation_needed": ["baseline_comparison", "constraint_residuals", "small_oracle", "sensitivity_analysis"]
+    },
+    {
+      "rank": 2,
+      "source_competition": "COMAP MCM/ICM",
+      "year": "2025",
+      "problem_id": "MCM/ICM A-F",
+      "problem_type": "多目标鲁棒",
+      "similarity_reason": "可借鉴开放式问题中的权衡分析和 robustness 表达。",
+      "borrowable_methods": ["scenario_analysis", "robustness_check"],
+      "cannot_copy_risks": ["国际赛表达结构只能作为验证启发，不能替代本题计算。"],
+      "validation_needed": ["weight_sensitivity", "limitations"]
+    }
+  ],
+  "candidate_methods": ["integer_programming", "enumeration_oracle", "scenario_analysis"],
+  "cannot_copy_risks": ["公开案例只提供方法结构启发，必须根据 problem_brief.md 重新建模和复算。"]
+}

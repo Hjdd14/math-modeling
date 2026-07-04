@@ -1,0 +1,15 @@
+{
+  "task_type": "optimization",
+  "target": "profit",
+  "features": ["capacity_a", "capacity_b", "unit_profit"],
+  "split": {
+    "type": "holdout",
+    "note": "小规模确定性优化题使用 oracle 与 baseline，不使用目标泄漏特征。"
+  },
+  "preprocessing": [
+    {
+      "name": "unit_normalization",
+      "fit_on": "train"
+    }
+  ]
+}

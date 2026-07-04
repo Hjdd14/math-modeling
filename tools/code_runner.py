@@ -4,6 +4,7 @@
 
 import argparse
 import glob
+import hashlib
 import json
 import os
 import subprocess
@@ -11,20 +12,29 @@ import sys
 import time
 
 
+def _sha256(path: str) -> str:
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
 def snapshot_files(dir_path: str) -> dict:
-    """记录工作目录下一层文件的大小和修改时间"""
+    """递归记录工作目录文件的大小、修改时间和 hash"""
     snapshot = {}
     if not os.path.isdir(dir_path):
         return snapshot
 
-    for name in os.listdir(dir_path):
-        path = os.path.join(dir_path, name)
-        if os.path.isfile(path):
-            stat = os.stat(path)
-            snapshot[name] = {
-                "size": stat.st_size,
-                "mtime_ns": stat.st_mtime_ns
-            }
+    for root, dir_names, file_names in os.walk(dir_path):
+        dir_names[:] = [name for name in dir_names if name not in {".git", "__pycache__", ".pytest_cache"}]
+        for name in file_names:
+            path = os.path.join(root, name)
+            if os.path.isfile(path):
+                stat = os.stat(path)
+                rel_path = os.path.relpath(path, dir_path).replace(os.sep, "/")
+                snapshot[rel_path] = {
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "sha256": _sha256(path),
+                }
     return snapshot
 
 
@@ -89,12 +99,22 @@ def run_code(file_path: str, lang: str, timeout: int = 300, workdir: str = None)
     new_files = after_files - before_files
     generated_files = [
         f for f in new_files
-        if os.path.isfile(os.path.join(workdir, f))
+        if os.path.isfile(os.path.join(workdir, *f.split("/")))
     ]
     changed_files = [
         f for f in sorted(after_files)
         if f not in before_snapshot or after_snapshot[f] != before_snapshot[f]
     ]
+    file_hashes = {
+        f: after_snapshot[f]["sha256"]
+        for f in sorted(set(generated_files) | set(changed_files))
+        if f in after_snapshot
+    }
+    result_hashes = {
+        f: digest
+        for f, digest in file_hashes.items()
+        if f == "results" or f.startswith("results/")
+    }
 
     return {
         "exit_code": exit_code,
@@ -103,6 +123,8 @@ def run_code(file_path: str, lang: str, timeout: int = 300, workdir: str = None)
         "execution_time": execution_time,
         "generated_files": generated_files,
         "changed_files": changed_files,
+        "file_hashes": file_hashes,
+        "result_hashes": result_hashes,
         "success": exit_code == 0
     }
 
