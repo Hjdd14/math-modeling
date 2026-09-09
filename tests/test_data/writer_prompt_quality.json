@@ -1,8 +1,8 @@
 {
-  "workspace": "C:\\Users\\PC\\.claude\\skills\\math-modeling\\tests\\test_data",
+  "workspace": "tests\\test_data",
   "mode": "excellence",
-  "path": "C:\\Users\\PC\\.claude\\skills\\math-modeling\\tests\\test_data\\writer_prompt.md",
-  "quality_report_path": "C:\\Users\\PC\\.claude\\skills\\math-modeling\\tests\\test_data\\writer_prompt_quality.json",
+  "path": "tests\\test_data\\writer_prompt.md",
+  "quality_report_path": "tests\\test_data\\writer_prompt_quality.json",
   "passed": true,
   "warning": false,
   "sections_found": 7,

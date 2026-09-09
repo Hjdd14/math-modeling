@@ -7,6 +7,7 @@ import glob
 import hashlib
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -49,6 +50,38 @@ def error(message: str, code: int = 1):
     sys.exit(code)
 
 
+def _terminate_process_tree(proc: subprocess.Popen):
+    """超时后回收整棵进程树。
+
+    subprocess 的超时只终止直接子进程，求解器派生的孙进程会遗留下来继续占用
+    CPU 和文件锁，导致后续验证读到写了一半的结果。
+    """
+    if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True,
+                timeout=30,
+            )
+        except Exception:
+            pass
+    else:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except Exception:
+            pass
+    try:
+        proc.kill()
+    except Exception:
+        pass
+    try:
+        proc.communicate(timeout=10)
+    except Exception:
+        pass
+
+
 def run_code(file_path: str, lang: str, timeout: int = 300, workdir: str = None) -> dict:
     """运行代码并捕获输出"""
     if not os.path.exists(file_path):
@@ -66,30 +99,40 @@ def run_code(file_path: str, lang: str, timeout: int = 300, workdir: str = None)
         cmd = [sys.executable, abs_file]
     elif lang == "matlab":
         script_name = os.path.splitext(os.path.basename(abs_file))[0]
-        cmd = ["matlab", "-batch", f"cd('{workdir}'); {script_name}"]
+        # 用 -sd 传工作目录，避免把路径拼进 MATLAB 语句：
+        # 路径含单引号时 cd('...') 会直接语法错误。
+        cmd = ["matlab", "-sd", workdir, "-batch", script_name]
     else:
         raise ValueError(f"不支持的语言: {lang}")
 
+    popen_kwargs = {
+        "cwd": workdir,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+    }
+    if os.name != "nt":
+        # 独立进程组，使超时能一次性回收整棵进程树。
+        popen_kwargs["start_new_session"] = True
+
     start_time = time.time()
+    timed_out = False
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=workdir
-        )
-        exit_code = result.returncode
-        stdout = result.stdout
-        stderr = result.stderr
-    except subprocess.TimeoutExpired:
-        exit_code = -1
-        stdout = ""
-        stderr = f"执行超时（超过 {timeout} 秒）"
+        proc = subprocess.Popen(cmd, **popen_kwargs)
     except FileNotFoundError as e:
         exit_code = -2
         stdout = ""
         stderr = f"命令未找到: {e}"
+    else:
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+            exit_code = proc.returncode
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _terminate_process_tree(proc)
+            exit_code = -1
+            stdout = ""
+            stderr = f"执行超时（超过 {timeout} 秒），已终止进程树"
 
     execution_time = round(time.time() - start_time, 3)
 

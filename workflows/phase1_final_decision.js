@@ -1,4 +1,6 @@
 // Phase 1.2.3: 主Agent综合所有方案和讨论，做出最终裁决
+// ⚠️ DEMO —— 单步派发模板，只覆盖裁决动作；不产出 model_spec/solver_strategy/
+// optimization_certificate 等固定产物，不能替代 references/workflow.md 的 Phase 1，不得作为交付依据。
 // 定位：可选宿主 Workflow 模板，依赖宿主提供 agent 全局函数。
 // 调用方式：Workflow({scriptPath: "workflows/phase1_final_decision.js", args: {all_solutions: {...}, all_criticisms: [...], consensus_history: [...]}})
 

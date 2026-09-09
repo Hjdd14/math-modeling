@@ -71,6 +71,71 @@ def output(result: dict):
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 
+# Phase 5 固定产物清单，取自 references/workflow.md 的归档要求。
+# 仅用于生成 artifact_completeness 提示，不参与 passed 判定：
+# standard 模式必须保持对旧工作区的兼容（warning-only）。
+RECOMMENDED_ARTIFACTS = (
+    "ambiguity_register.json",
+    "assumption_ledger.md",
+    "scoring_strategy.md",
+    "data_schema.json",
+    "symbol_table.json",
+    "modeling_state.json",
+    "modeling_memory.md",
+    "baseline_solution.json",
+    "case_retrieval.json",
+    "model_selection_audit.json",
+    "model_spec.json",
+    "optimization_certificate.json",
+    "uncertainty_budget.json",
+    "validation_profile.json",
+    "data_validation.json",
+    "statistical_validation.json",
+    "solver_strategy.json",
+    "ablation_study.json",
+    "innovation_register.json",
+    "final_solution.json",
+    "model_decision.md",
+    "writer_prompt.md",
+    "figure_style.json",
+    "figure_storyboard.md",
+    "results/validation_summary.json",
+    "results/figure_quality_report.json",
+    "judge_panel_review.json",
+    "decision_insights.md",
+    "defense_questions.md",
+    "compliance_record.json",
+    "reproducibility_manifest.json",
+)
+
+
+def _artifact_completeness(root: Path, language: str, required_missing: list) -> dict:
+    """汇总固定产物齐备情况，让"standard 模式通过"不等于"产物齐全"。"""
+    code_name = "solution.m" if language == "matlab" else "solution.py"
+    tests_name = "solution_tests.m" if language == "matlab" else "solution_tests.py"
+    required = ["problem_brief.md", code_name, "results"]
+    recommended = list(RECOMMENDED_ARTIFACTS) + [tests_name]
+
+    present, missing = [], []
+    for rel in recommended:
+        if (root / rel).exists():
+            present.append(rel)
+        else:
+            missing.append(rel)
+    return {
+        "required": required,
+        "required_missing": [str(item) for item in required_missing],
+        "recommended_total": len(recommended),
+        "recommended_present": present,
+        "recommended_missing": missing,
+        "recommended_present_count": len(present),
+        "note": (
+            "recommended_missing 不影响 passed。standard 模式只做兼容性自检；"
+            "完整交付请使用 --evidence-mode strict --quality-mode excellence。"
+        ),
+    }
+
+
 def error(message: str, code: int = 1):
     print(json.dumps({"error": message}, ensure_ascii=False), file=sys.stderr)
     sys.exit(code)
@@ -82,6 +147,40 @@ def _safe(name: str, checks: dict, func):
     except Exception as exc:
         checks[name] = {"passed": False, "error": str(exc)}
     return checks[name]
+
+
+def _latex_advisory(model_decision: Path) -> dict:
+    """对 model_decision.md 中的 LaTeX 公式做提示性检查。
+
+    该检查只产出 warning：LaTeX 校验是启发式的，不足以作为总控失败依据，
+    但此前 validate_latex_file 被导入却从未调用，模型文档里的公式完全没被看过。
+    需要判失败时请单独运行 tools/latex_validator.py。
+    """
+    result = {"passed": True, "warning": False, "advisory_only": True, "issues": []}
+    try:
+        report = validate_latex_file(str(model_decision))
+    except Exception as exc:
+        result["warning"] = True
+        result["issues"].append({"code": "latex_check_skipped", "severity": "warning", "detail": str(exc)})
+        return result
+
+    result.update({
+        "total_formulas": report.get("total_formulas", 0),
+        "valid": report.get("valid", 0),
+        "invalid": report.get("invalid", 0),
+        "score": report.get("score"),
+    })
+    invalid_details = [item for item in report.get("details", []) if not item.get("valid")]
+    if invalid_details:
+        result["warning"] = True
+        for item in invalid_details[:10]:
+            result["issues"].append({
+                "code": "latex_formula_issue",
+                "severity": "warning",
+                "line": item.get("line"),
+                "detail": "; ".join(str(x) for x in item.get("issues", [])) or "公式可能存在语法问题",
+            })
+    return result
 
 
 def run_checks(
@@ -119,6 +218,9 @@ def run_checks(
             result.setdefault("passed", "error" not in result)
             return result
         _safe("consistency_checker", checks, consistency_step)
+
+    if model_decision.exists():
+        checks["latex_advisory"] = _latex_advisory(model_decision)
 
     if brief.exists() and model_decision.exists():
         _safe("brief_model", checks, lambda: validate_against_brief(str(brief), "model", str(model_decision)))
@@ -161,6 +263,18 @@ def run_checks(
         if name == "figure_checker" and (result.get("total", 0) == 0 or result.get("passed_all") is False):
             passed = False
 
+    completeness = _artifact_completeness(root, language, missing)
+    warned = sorted(
+        name for name, result in checks.items()
+        if isinstance(result, dict) and (result.get("warning") or result.get("issues"))
+    )
+    if not passed:
+        status = "fail"
+    elif warned or completeness["recommended_missing"]:
+        status = "pass_with_warnings"
+    else:
+        status = "pass"
+
     return {
         "workspace": str(root),
         "language": language,
@@ -168,6 +282,9 @@ def run_checks(
         "quality_mode": quality_mode,
         "online_source_materials": online_source_materials,
         "passed": passed,
+        "status": status,
+        "warned_checks": warned,
+        "artifact_completeness": completeness,
         "checks": checks,
     }
 
@@ -187,7 +304,7 @@ def main():
         "--quality-mode",
         default="standard",
         choices=["standard", "strict", "hard", "complete", "full", "excellence"],
-        help="standard 兼容旧工作区；strict/excellence 要求 1.2.0 质量闭环产物完整",
+        help="standard 兼容旧工作区；strict/excellence 要求质量闭环产物完整",
     )
     parser.add_argument(
         "--online-source-materials",

@@ -611,6 +611,19 @@ def test_validation_summary_fields():
 
 ## Python solution.py
 
+模板里的验证函数默认返回 `status: "NOT_VALIDATED"` 与 `passed: null`，这是**故意的**：占位证据不是证据。
+必须用真实计算替换每个 `TODO(必填)` 处的返回值，并把 `status` 改为 `passed` 或 `failed`。
+`evidence_checker.py` 与 `robustness_checker.py` 会拒绝仍含占位标记的 `validation_summary.json`，
+所以照抄模板不做替换会在验证阶段直接失败，而不是伪装成通过。
+
+对确定性模型（精确枚举、确定性线性规划、最短路、解析解 ODE），随机性相关条目
+（`multi_start`、`random_seed_stability`、`bootstrap_confidence_interval`、`perturbation_stability`）
+可以显式声明不适用，但必须同时给出理由和替代验证方式：
+
+```json
+{"status": "not_applicable", "rationale": "模型为确定性精确枚举，不涉及随机初始化", "alternative_validation": "全枚举穷举验证 + 约束残差检查"}
+```
+
 ```python
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -624,6 +637,8 @@ import pandas as pd
 
 
 RESULTS_DIR = Path("results")
+# 占位状态：未经真实计算的证据一律标记为 NOT_VALIDATED，交给 checker 拦截。
+NOT_VALIDATED = "NOT_VALIDATED"
 
 
 def ensure_results_dir():
@@ -631,66 +646,77 @@ def ensure_results_dir():
 
 
 def run_baseline():
+    # TODO(必填): 实际运行 baseline 与最终模型，填入真实数值，并把 status 改为 passed/failed
     return {
         "baseline_name": "naive_feasible_solution",
         "metric": "objective",
-        "baseline_value": 0.0,
-        "model_value": 0.0,
-        "passed": True,
+        "baseline_value": None,
+        "model_value": None,
+        "status": NOT_VALIDATED,
+        "passed": None,
     }
 
 
 def run_known_case_tests():
+    # TODO(必填): 用可手算的小规模已知解替换 expected/actual
     return [
         {
             "name": "small_known_case",
-            "expected": 0.0,
-            "actual": 0.0,
-            "passed": True,
+            "expected": None,
+            "actual": None,
+            "status": NOT_VALIDATED,
+            "passed": None,
         }
     ]
 
 
 def run_solver_cross_checks():
+    # TODO(必填): 用第二个求解器或穷举结果交叉验证主求解器
     return [
         {
             "name": "primary_vs_enumeration",
-            "primary": 0.0,
-            "secondary": 0.0,
-            "passed": True,
+            "primary": None,
+            "secondary": None,
+            "status": NOT_VALIDATED,
+            "passed": None,
         }
     ]
 
 
 def run_sensitivity_analysis():
+    # TODO(必填): 实际扰动关键参数并记录最大相对变化
     return {
         "method": "one_at_a_time",
-        "max_relative_change": 0.0,
-        "passed": True,
+        "max_relative_change": None,
+        "status": NOT_VALIDATED,
+        "passed": None,
     }
 
 
 def write_validation_summary():
+    # TODO(必填): 下列每一项都必须由真实计算产生；
+    # 不适用的随机性条目请写成 {"status": "not_applicable", "rationale": ..., "alternative_validation": ...}
     summary = {
         "baseline_comparison": run_baseline(),
         "oracle_tests": run_known_case_tests(),
         "solver_cross_checks": run_solver_cross_checks(),
         "sensitivity_analysis": run_sensitivity_analysis(),
-        "invariants": [{"name": "constraints_satisfied", "passed": True}],
+        "invariants": [{"name": "constraints_satisfied", "status": NOT_VALIDATED, "passed": None}],
         "failure_modes": [
             {"name": "missing_or_invalid_input", "mitigation": "stop with explicit error"}
         ],
-        "constraint_residuals": {"max_abs": 0.0, "passed": True},
-        "optimality_gap": {"value": 0.0, "passed": True},
-        "multi_start": {"runs": 3, "best_values": [0.0, 0.0, 0.0], "passed": True},
-        "random_seed_stability": {"seeds": [1, 2, 3], "std": 0.0, "passed": True},
+        "constraint_residuals": {"max_abs": None, "tolerance": 1e-6, "status": NOT_VALIDATED, "passed": None},
+        "optimality_gap": {"value": None, "tolerance": 1e-4, "status": NOT_VALIDATED, "passed": None},
+        "multi_start": {"runs": 0, "best_values": [], "status": NOT_VALIDATED, "passed": None},
+        "random_seed_stability": {"seeds": [], "std": None, "status": NOT_VALIDATED, "passed": None},
         "bootstrap_confidence_interval": {
             "level": 0.95,
-            "lower": 0.0,
-            "upper": 0.0,
-            "passed": True,
+            "lower": None,
+            "upper": None,
+            "status": NOT_VALIDATED,
+            "passed": None,
         },
-        "perturbation_stability": {"ranking_changed": False, "passed": True},
+        "perturbation_stability": {"ranking_changed": None, "status": NOT_VALIDATED, "passed": None},
     }
     (RESULTS_DIR / "validation_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2),
@@ -753,19 +779,22 @@ fprintf(fid, '{"status":"ok"}');
 fclose(fid);
 
 % 4. 可信度证据
+% TODO(必填): 下列每一项都必须由真实计算产生；status 仍为 NOT_VALIDATED 时 checker 会判失败。
+% 不适用的随机性条目请写成 struct("status","not_applicable","rationale",...,"alternative_validation",...)
+NOT_VALIDATED = "NOT_VALIDATED";
 validation = struct();
 validation.baseline_comparison = run_baseline();
 validation.oracle_tests = run_known_case_tests();
-validation.solver_cross_checks = struct("name", "primary_vs_enumeration", "primary", 0, "secondary", 0, "passed", true);
+validation.solver_cross_checks = struct("name", "primary_vs_enumeration", "primary", [], "secondary", [], "status", NOT_VALIDATED);
 validation.sensitivity_analysis = run_sensitivity_analysis();
-validation.invariants = struct("name", "constraints_satisfied", "passed", true);
+validation.invariants = struct("name", "constraints_satisfied", "status", NOT_VALIDATED);
 validation.failure_modes = struct("name", "missing_or_invalid_input", "mitigation", "stop with explicit error");
-validation.constraint_residuals = struct("max_abs", 0, "passed", true);
-validation.optimality_gap = struct("value", 0, "passed", true);
-validation.multi_start = struct("runs", 3, "best_values", [0, 0, 0], "passed", true);
-validation.random_seed_stability = struct("seeds", [1, 2, 3], "std", 0, "passed", true);
-validation.bootstrap_confidence_interval = struct("level", 0.95, "lower", 0, "upper", 0, "passed", true);
-validation.perturbation_stability = struct("ranking_changed", false, "passed", true);
+validation.constraint_residuals = struct("max_abs", [], "tolerance", 1e-6, "status", NOT_VALIDATED);
+validation.optimality_gap = struct("value", [], "tolerance", 1e-4, "status", NOT_VALIDATED);
+validation.multi_start = struct("runs", 0, "best_values", [], "status", NOT_VALIDATED);
+validation.random_seed_stability = struct("seeds", [], "std", [], "status", NOT_VALIDATED);
+validation.bootstrap_confidence_interval = struct("level", 0.95, "lower", [], "upper", [], "status", NOT_VALIDATED);
+validation.perturbation_stability = struct("ranking_changed", [], "status", NOT_VALIDATED);
 fid = fopen(fullfile(resultsDir, "validation_summary.json"), "w");
 fprintf(fid, "%s", jsonencode(validation));
 fclose(fid);
@@ -780,16 +809,19 @@ exportgraphics(fig, fullfile(resultsDir, "result_main.png"), "Resolution", 300);
 close(fig);
 
 function baseline = run_baseline()
+% TODO(必填): 实际运行 baseline 与最终模型，填入真实数值，并把 status 改为 passed/failed
 baseline = struct("baseline_name", "naive_feasible_solution", "metric", "objective", ...
-    "baseline_value", 0, "model_value", 0, "passed", true);
+    "baseline_value", [], "model_value", [], "status", "NOT_VALIDATED");
 end
 
 function tests = run_known_case_tests()
-tests = struct("name", "small_known_case", "expected", 0, "actual", 0, "passed", true);
+% TODO(必填): 用可手算的小规模已知解替换 expected/actual
+tests = struct("name", "small_known_case", "expected", [], "actual", [], "status", "NOT_VALIDATED");
 end
 
 function sensitivity = run_sensitivity_analysis()
-sensitivity = struct("method", "one_at_a_time", "max_relative_change", 0, "passed", true);
+% TODO(必填): 实际扰动关键参数并记录最大相对变化
+sensitivity = struct("method", "one_at_a_time", "max_relative_change", [], "status", "NOT_VALIDATED");
 end
 ```
 

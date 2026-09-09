@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """测试运行器：运行所有测试并生成汇总报告"""
 
+import glob
 import os
 import subprocess
 import sys
@@ -10,35 +11,23 @@ SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS_DIR = os.path.join(SKILL_DIR, "tests")
 
 
+def discover_test_files():
+    """按 glob 发现测试文件。
+
+    此前这里是一份手工维护的 25 条清单，没有任何测试守护它与实际文件同步，
+    新增 test_*.py 会被本编排器静默跳过。改为 glob 后不可能漏测。
+    """
+    paths = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
+    return [os.path.basename(path) for path in paths]
+
+
 def main():
     """运行所有测试"""
-    test_files = [
-        "test_data_analyzer.py",
-        "test_brief_validator.py",
-        "test_code_runner.py",
-        "test_figure_checker.py",
-        "test_latex_validator.py",
-        "test_consistency_checker.py",
-        "test_consensus_system.py",
-        "test_e2e_workflow.py",
-        "test_performance.py",
-        "test_skill_docs.py",
-        "test_input_parser.py",
-        "test_state_manager.py",
-        "test_pipeline_check.py",
-        "test_evidence_checker.py",
-        "test_quality_tools.py",
-        "test_award_workflow_tools.py",
-        "test_award_level_enhancements.py",
-        "test_competition_sources.py",
-        "test_source_material_reader.py",
-        "test_completion_gaps.py",
-        "test_workflow_runner.py",
-        "test_eval_files.py",
-        "test_matlab_support.py",
-        "test_open_source_readiness.py",
-        "test_doctor.py",
-    ]
+    test_files = discover_test_files()
+    if not test_files:
+        print(f"No test files discovered under {TESTS_DIR}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Discovered {len(test_files)} test files under tests/")
 
     results = []
     for test_file in test_files:

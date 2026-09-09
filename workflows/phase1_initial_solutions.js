@@ -1,4 +1,6 @@
 // Phase 1.2.1: 5个视角Agent并行生成初始建模方案
+// ⚠️ DEMO —— 单步并行派发模板，只覆盖五视角初始方案派发；不含题型分类、资料库检索、
+// baseline 与动态专家，不能替代 references/workflow.md 的 Phase 1，不得作为交付依据。
 // 定位：可选宿主 Workflow 模板，依赖宿主提供 agent/parallel 全局函数。
 // 调用方式：Workflow({scriptPath: "workflows/phase1_initial_solutions.js", args: {problem_description: "..."}})
 

@@ -24,6 +24,9 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 SKILL_NAME="math-modeling"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Capture the inherited SKILLS_DIR env var BEFORE any later assignment clobbers it,
+# so `SKILLS_DIR=... ./install.sh` keeps working as documented in the header.
+SKILLS_DIR_ENV="${SKILLS_DIR:-}"
 
 # ANSI helpers (only if stdout is a terminal, otherwise strip colors).
 if [ -t 1 ]; then
@@ -147,9 +150,9 @@ SKILLS_DIR=""
 if [ -n "$SKILLS_DIR_ARG" ]; then
     SKILLS_DIR="$SKILLS_DIR_ARG"
 fi
-# 2. Environment variable
-if [ -z "$SKILLS_DIR" ] && [ -n "${SKILLS_DIR:-}" ]; then
-    SKILLS_DIR="$SKILLS_DIR"
+# 2. Environment variable (captured at the top of this script)
+if [ -z "$SKILLS_DIR" ] && [ -n "$SKILLS_DIR_ENV" ]; then
+    SKILLS_DIR="$SKILLS_DIR_ENV"
 fi
 # 3. Auto-detect common agent skills directories
 if [ -z "$SKILLS_DIR" ]; then
@@ -214,5 +217,5 @@ Next steps:
      (Excel / CSV).
 
 Skill location: $SCRIPT_DIR
-Report bugs at: https://github.com/issues  (replace with your repo URL)
+Report bugs at: https://github.com/Hjdd14/math-modeling/issues
 EOF

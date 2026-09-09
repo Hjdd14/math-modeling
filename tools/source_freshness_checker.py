@@ -67,7 +67,8 @@ def _flatten_sources(payload: dict) -> list[dict]:
     return sources
 
 
-def _years_cover_current(source: dict, current_year: int) -> bool:
+def _max_covered_year(source: dict) -> int | None:
+    """返回该来源记录的最新覆盖年份；无法解析时返回 None。"""
     if isinstance(source.get("years"), list) and source["years"]:
         years = []
         for item in source["years"]:
@@ -75,24 +76,33 @@ def _years_cover_current(source: dict, current_year: int) -> bool:
                 years.append(int(item))
             except (TypeError, ValueError):
                 pass
-        return bool(years) and max(years) >= current_year - 1
+        return max(years) if years else None
     years_covered = source.get("years_covered", {})
     if isinstance(years_covered, dict):
         try:
-            return int(years_covered.get("to")) >= current_year - 1
+            return int(years_covered.get("to"))
         except (TypeError, ValueError):
-            return False
-    return False
+            return None
+    return None
 
 
-def _reference_year(sources: list[dict]) -> int:
-    """Use checked_at when present so offline fixtures stay deterministic."""
+def _reference_year(payload: dict, sources: list[dict]) -> tuple[int, str]:
+    """确定用于比较年份覆盖的基准年及其来源。
+
+    优先使用注册表自身的维护版本，其次是逐条来源的 checked_at，最后才回落到系统时钟。
+    历史赛事资料本来就不会每年更新，用墙上时钟当基准会让所有来源在跨年时集体误报过期。
+    """
+    version = str(payload.get("version", "")) if isinstance(payload, dict) else ""
+    if len(version) >= 4 and version[:4].isdigit():
+        return int(version[:4]), "registry_version"
     checked_years = []
     for source in sources:
         checked_at = str(source.get("checked_at", ""))
         if len(checked_at) >= 4 and checked_at[:4].isdigit():
             checked_years.append(int(checked_at[:4]))
-    return max(checked_years) if checked_years else date.today().year
+    if checked_years:
+        return max(checked_years), "source_checked_at"
+    return date.today().year, "system_clock"
 
 
 def _primary_url(source: dict) -> str | None:
@@ -249,10 +259,19 @@ def check_source_freshness(workspace: str, mode: str = "standard", online: bool 
     issues: list[dict] = []
     checks: list[dict] = []
     sources = _flatten_sources(payload) if isinstance(payload, dict) else []
-    current_year = _reference_year(sources)
+    reference_year, reference_basis = _reference_year(payload if isinstance(payload, dict) else {}, sources)
 
     if not sources:
         _add_issue(issues, "missing_sources", "来源登记表必须包含非空来源列表。", severity=severity)
+
+    if reference_basis == "system_clock" and sources:
+        # 注册表既没有 version 也没有 checked_at 时无法判断维护时点，只提示不判失败。
+        _add_issue(
+            issues,
+            "missing_registry_maintenance_date",
+            "来源登记表缺少 version 或 checked_at，无法判断维护时点；已回落到系统时钟。",
+            severity="warning",
+        )
 
     reachable_checked = 0
     for index, source in enumerate(sources):
@@ -261,13 +280,42 @@ def check_source_freshness(workspace: str, mode: str = "standard", online: bool 
             continue
         url = _primary_url(source)
         required_ok = _present(source.get("name")) and _present(url) and _present(source.get("tier"))
-        years_ok = _years_cover_current(source, current_year)
+        max_year = _max_covered_year(source)
+        coverage_recorded = max_year is not None
+        # 覆盖年份落后于注册表维护时点只说明尚未收录新一届赛事，不等于来源失效，
+        # 因此固定为 warning；真正的结构缺陷是年份覆盖压根没记录。
+        coverage_behind = coverage_recorded and max_year < reference_year - 1
         checks.append({"name": f"source_{index}_structure", "passed": required_ok, "source": source.get("name")})
-        checks.append({"name": f"source_{index}_years", "passed": years_ok, "source": source.get("name")})
+        checks.append({
+            "name": f"source_{index}_years",
+            "passed": coverage_recorded,
+            "source": source.get("name"),
+            "max_covered_year": max_year,
+            "reference_year": reference_year,
+            "reference_basis": reference_basis,
+            "coverage_behind_reference": coverage_behind,
+        })
         if not required_ok:
             _add_issue(issues, "missing_source_field", "来源项缺少 name/url/tier。", severity=severity, index=index, source=source.get("name"))
-        if not years_ok:
-            _add_issue(issues, "stale_source_years", "来源年份覆盖不足或未记录到近两年。", severity=severity, index=index, source=source.get("name"))
+        if not coverage_recorded:
+            _add_issue(
+                issues,
+                "missing_year_coverage",
+                "来源项未记录可解析的 years 或 years_covered.to。",
+                severity=severity,
+                index=index,
+                source=source.get("name"),
+            )
+        elif coverage_behind:
+            _add_issue(
+                issues,
+                "source_years_behind_registry_version",
+                f"来源覆盖到 {max_year}，落后于基准年 {reference_year}（依据: {reference_basis}）；"
+                "历史赛事资料可能只是尚未收录新一届，需人工确认是否需要更新登记表。",
+                severity="warning",
+                index=index,
+                source=source.get("name"),
+            )
         if online and url:
             reachability_check, checked_count = _check_online_reachability(source, index, issues, severity)
             reachable_checked += checked_count
@@ -284,6 +332,8 @@ def check_source_freshness(workspace: str, mode: str = "standard", online: bool 
         "warning": warning,
         "sources_checked": len(sources),
         "reachable_checked": reachable_checked,
+        "reference_year": reference_year,
+        "reference_basis": reference_basis,
         "checks": checks,
         "issues": issues,
     }

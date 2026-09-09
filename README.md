@@ -63,7 +63,7 @@
 | **Phase 4** 评审验证 | 语法/逻辑/输出三 Agent 并行，独立复现，多评委并行审查，工具链 gate | `judge_panel_review.json`、`results/figure_quality_report.json` |
 | **Phase 5** 最终交付 | 合规审计、复现清单、状态归档 | `compliance_record.json`、`reproducibility_manifest.json` |
 
-伴随 21+ 个结构化 checker 把"模型 / 数据 / 代码 / 图表 / 复现 / 合规"全链路连成证据簿。
+伴随 24 个结构化 checker 把"模型 / 数据 / 代码 / 图表 / 复现 / 合规"全链路连成证据簿。
 
 ---
 
@@ -85,7 +85,7 @@
 
 ```bash
 # 1) 把仓库克隆到任意 Agent 的 skills 目录（下表任选其一）
-git clone https://github.com/<owner>/math-modeling.git ~/.claude/skills/math-modeling
+git clone https://github.com/Hjdd14/math-modeling.git ~/.claude/skills/math-modeling
 
 # 2) 进入目录并运行安装脚本（自动 pip 依赖 + 自检 + 尝试符号链接到 skills 目录）
 cd ~/.claude/skills/math-modeling
@@ -96,7 +96,7 @@ bash install.sh
 
 ```powershell
 # 1) 克隆到 Claude Code 的 skills 目录
-git clone https://github.com/<owner>/math-modeling.git $env:USERPROFILE\.claude\skills\math-modeling
+git clone https://github.com/Hjdd14/math-modeling.git $env:USERPROFILE\.claude\skills\math-modeling
 
 # 2) 进入目录并运行安装脚本
 cd $env:USERPROFILE\.claude\skills\math-modeling
@@ -106,7 +106,7 @@ cd $env:USERPROFILE\.claude\skills\math-modeling
 > **一行命令完成所有（推荐）：**
 
 ```bash
-git clone https://github.com/<owner>/math-modeling.git ~/.claude/skills/math-modeling \
+git clone https://github.com/Hjdd14/math-modeling.git ~/.claude/skills/math-modeling \
   && bash ~/.claude/skills/math-modeling/install.sh
 ```
 
@@ -133,14 +133,14 @@ git clone https://github.com/<owner>/math-modeling.git ~/.claude/skills/math-mod
 **安装到 Claude Code 全局目录：**
 
 ```bash
-git clone https://github.com/<owner>/math-modeling.git ~/.claude/skills/math-modeling
+git clone https://github.com/Hjdd14/math-modeling.git ~/.claude/skills/math-modeling
 bash ~/.claude/skills/math-modeling/install.sh
 ```
 
 **安装到 OpenCode 全局目录：**
 
 ```bash
-git clone https://github.com/<owner>/math-modeling.git ~/.config/opencode/skills/math-modeling
+git clone https://github.com/Hjdd14/math-modeling.git ~/.config/opencode/skills/math-modeling
 bash ~/.config/opencode/skills/math-modeling/install.sh
 ```
 
@@ -158,7 +158,7 @@ bash install.sh --skills-dir ~/your-agent-skills-dir
 
 ```bash
 # 在你的项目根目录下克隆
-git clone https://github.com/<owner>/math-modeling.git .claude/skills/math-modeling
+git clone https://github.com/Hjdd14/math-modeling.git .claude/skills/math-modeling
 
 # 进入并运行安装（注意：项目级 install 通常不需要 --skills-dir）
 cd .claude/skills/math-modeling && bash install.sh --no-doctor
@@ -168,7 +168,7 @@ cd .claude/skills/math-modeling && bash install.sh --no-doctor
 
 ```bash
 # 1) 克隆仓库
-git clone https://github.com/<owner>/math-modeling
+git clone https://github.com/Hjdd14/math-modeling
 cd math-modeling
 
 # 2) 安装 Python 依赖
@@ -301,7 +301,7 @@ math-modeling/
 │   ├── award_playbook.md     # 题型方法卡谱系
 │   ├── evaluator_panel.md   # 多评委并行审查规则
 │   └── evals.md              # 本地 eval 与触发评估
-├── tools/                    # 21+ 结构化 checker（Python）
+├── tools/                    # Python CLI 工具（39 个，含 24 个 checker）
 │   ├── workflow_runner.py    # scaffold/resume/verify
 │   ├── pipeline_check.py     # 总控验证入口
 │   ├── input_parser.py       # PDF/DOCX/MD/TXT + Excel/CSV 解析
@@ -395,7 +395,7 @@ python tests/run_all_tests.py
 
 - **`SKILL.md`** —— 短主入口，明确触发条件、核心约束与 Phase Gates
 - **`references/`** —— 降低上下文负担的详细文档：`references/workflow.md`（完整流程）、`references/templates.md`（产物模板）、`references/tools.md`（CLI 字段说明）、`references/competition_sources.json`（权威来源）、`references/award_playbook.md`（题型方法卡）、`references/evaluator_panel.md`（评委规则）、`references/evals.md`（eval 流程）
-- **`tools/`** —— Python CLI 工具，21+ 结构化 checker，全部可独立运行
+- **`tools/`** —— Python CLI 工具（39 个，其中 24 个 *_checker.py），全部可独立运行
 - **`workflows/`** —— 宿主 workflow JS 模板，用于派发并行 Agent
 - **`evals/`** —— 本地 eval、触发评估、mini contest benchmark
 - **`examples/`** —— 公开合成样例，便于其他 Agent 与开源用户对齐

@@ -1,4 +1,6 @@
 // Phase 1.2.2 Round N: 5个视角Agent并行回应批评并修正方案
+// ⚠️ DEMO —— 单步并行派发模板，只覆盖并行修正；不能替代 references/workflow.md 的
+// Phase 1 完整共识流程，不得作为交付依据。
 // 定位：可选宿主 Workflow 模板，依赖宿主提供 agent/parallel 全局函数。
 // 调用方式：Workflow({scriptPath: "workflows/phase1_update.js", args: {my_solution: {...}, all_criticisms: {...}, all_solutions: {...}}})
 

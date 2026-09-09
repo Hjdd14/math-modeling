@@ -26,11 +26,31 @@ def error(message: str, code: int = 1):
     sys.exit(code)
 
 
-def _read_text_file(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+TEXT_ENCODINGS = ("utf-8", "utf-8-sig", "gb18030", "big5")
 
 
-def _read_pdf(path: Path) -> str:
+def _read_text_file(path: Path) -> tuple[str, str, bool]:
+    """按常见中文赛题编码依次尝试读取。
+
+    返回 (文本, 实际使用的编码, 是否降级)。裸 utf-8 读取会让 GBK/GB18030
+    编码的中文题目直接失败，而这类编码在国内赛题里很常见。
+    """
+    raw = path.read_bytes()
+    for encoding in TEXT_ENCODINGS:
+        try:
+            return raw.decode(encoding), encoding, False
+        except UnicodeDecodeError:
+            continue
+    # 全部失败时保底解码，并显式标记降级，避免静默产出乱码而调用方不知情。
+    return raw.decode("utf-8", errors="replace"), "utf-8(errors=replace)", True
+
+
+def _read_pdf(path: Path) -> tuple[str, list[dict]]:
+    """提取 PDF 文本，并逐页记录抽取状态。
+
+    返回 (文本, 每页状态)。保留页级状态是为了让扫描件或公式排版复杂的页面
+    可被识别，而不是被静默丢弃。
+    """
     try:
         from pypdf import PdfReader
     except ImportError as exc:
@@ -38,9 +58,17 @@ def _read_pdf(path: Path) -> str:
 
     reader = PdfReader(str(path))
     parts = []
-    for page in reader.pages:
-        parts.append(page.extract_text() or "")
-    return "\n".join(part for part in parts if part).strip()
+    page_report = []
+    for index, page in enumerate(reader.pages, start=1):
+        try:
+            page_text = page.extract_text() or ""
+        except Exception as exc:
+            page_text = ""
+            page_report.append({"page": index, "chars": 0, "extracted": False, "error": str(exc)})
+        else:
+            page_report.append({"page": index, "chars": len(page_text.strip()), "extracted": bool(page_text.strip())})
+        parts.append(page_text)
+    return "\n".join(part for part in parts if part).strip(), page_report
 
 
 def _read_docx_with_zip(path: Path) -> str:
@@ -79,29 +107,78 @@ def extract_text(file_path: str) -> dict:
         raise FileNotFoundError(f"文件不存在: {file_path}")
 
     ext = path.suffix.lower()
+    encoding = None
+    encoding_fallback = False
+    page_report: list[dict] = []
     if ext in {".txt", ".md"}:
-        text = _read_text_file(path)
+        text, encoding, encoding_fallback = _read_text_file(path)
     elif ext == ".pdf":
-        text = _read_pdf(path)
+        text, page_report = _read_pdf(path)
     elif ext == ".docx":
         text = _read_docx(path)
     else:
         raise ValueError(f"不支持的题目文件格式: {ext}")
 
-    return {
+    if not text.strip():
+        if ext == ".pdf":
+            raise ValueError(
+                f"PDF 文本抽取为空（共 {len(page_report)} 页）："
+                "该文件可能是扫描件或纯图片版。请提供带文本层的 PDF，或先做 OCR，"
+                "不要基于空题目文本继续建模。"
+            )
+        raise ValueError(f"题目文本抽取为空: {file_path}；请确认文件内容与编码。")
+
+    result = {
         "file_name": path.name,
         "file_type": ext.lstrip("."),
         "text": text,
         "char_count": len(text),
         "line_count": len(text.splitlines()),
     }
+    if encoding is not None:
+        result["encoding"] = encoding
+        result["encoding_fallback"] = encoding_fallback
+    if page_report:
+        empty_pages = [item["page"] for item in page_report if not item["extracted"]]
+        result["pages"] = page_report
+        result["empty_pages"] = empty_pages
+        result["extraction_ratio"] = round(1 - len(empty_pages) / len(page_report), 4)
+    return result
 
 
 def summarize_data_file(file_path: str) -> dict:
+    """汇总单个附件的结构、统计与质量。
+
+    Excel 多工作表必须逐表统计：pandas 在 sheet_name=None 时只读第一个工作表，
+    旧实现把首个工作表的质量评分复用到全部工作表，并且其余工作表从未被统计。
+    """
+    structure = read_data_structure(file_path)
+    is_excel = structure.get("file_type") in {"xlsx", "xls"}
+    sheets = structure.get("sheets", [])
+
+    by_sheet = {}
+    for sheet in sheets:
+        sheet_name = sheet.get("sheet_name")
+        sheet_arg = sheet_name if is_excel else None
+        by_sheet[sheet_name] = {
+            "stats": generate_stats(file_path, sheet_arg),
+            "quality": check_quality(file_path, sheet_arg),
+        }
+
+    first_sheet = sheets[0].get("sheet_name") if sheets else None
+    # stats/quality 保留为首个工作表的结果，维持既有调用方的返回形状。
+    if first_sheet is not None and first_sheet in by_sheet:
+        first_stats = by_sheet[first_sheet]["stats"]
+        first_quality = by_sheet[first_sheet]["quality"]
+    else:
+        first_stats = generate_stats(file_path)
+        first_quality = check_quality(file_path)
+
     return {
-        "structure": read_data_structure(file_path),
-        "stats": generate_stats(file_path),
-        "quality": check_quality(file_path),
+        "structure": structure,
+        "stats": first_stats,
+        "quality": first_quality,
+        "by_sheet": by_sheet,
     }
 
 
@@ -136,17 +213,26 @@ def render_brief(problem_info: dict, data_summaries: list) -> str:
         "",
         "### 5.1 附件清单",
         "",
-        "| 文件名 | 工作表名 | 行数 | 列数 | 质量评分 |",
-        "|--------|----------|------|------|----------|",
+        "| 文件名 | 工作表名 | 行数 | 列数 | 质量评分 | 备注 |",
+        "|--------|----------|------|------|----------|------|",
     ]
 
     for summary in data_summaries:
         structure = summary["structure"]
-        quality = summary["quality"]
+        by_sheet = summary.get("by_sheet", {})
         for sheet in structure["sheets"]:
+            sheet_name = sheet["sheet_name"]
+            sheet_quality = by_sheet.get(sheet_name, {}).get("quality") or summary.get("quality", {})
+            score = sheet_quality.get("quality_score", "-")
+            flags = []
+            if sheet_quality.get("empty_data"):
+                flags.append("空数据")
+            if sheet_quality.get("outlier_detection_applied") is False and not sheet_quality.get("empty_data"):
+                flags.append("样本过少")
+            note = "；".join(flags) if flags else "-"
             lines.append(
-                f"| {structure['file_name']} | {sheet['sheet_name']} | "
-                f"{sheet['rows']} | {sheet['columns']} | {quality['quality_score']} |"
+                f"| {structure['file_name']} | {sheet_name} | "
+                f"{sheet['rows']} | {sheet['columns']} | {score} | {note} |"
             )
 
     lines.extend([

@@ -95,17 +95,20 @@ python "tools/workflow_runner.py" scaffold --workspace "." --language python
 python "tools/workflow_runner.py" resume --workspace "." --language python
 ```
 
-最终验证：
+快速自检（兼容旧工作区，warning-only，通过不代表产物齐全）：
 
 ```bash
 python "tools/pipeline_check.py" --workspace "." --language python
 ```
 
-奖项级完整交付：
+最终交付验证（难题、完整交付、竞赛正式结果必须使用）：
 
 ```bash
 python "tools/pipeline_check.py" --workspace "." --language python --evidence-mode strict --quality-mode excellence
 ```
+
+标准模式只做结构自检，缺失的质量闭环产物只报 warning；`passed: true` 仅表示没有硬性错误，
+产物齐备情况见返回值中的 `artifact_completeness` 与 `status` 字段。最终交付一律以严格/卓越模式为准。
 
 把 `python` 换成 `matlab` 即使用 MATLAB 分支。`workflow_runner.py` 只初始化、恢复和验证文件状态；并行 Agent 推理仍必须由执行者按 `references/workflow.md` 发起。
 
@@ -129,7 +132,9 @@ python "tools/pipeline_check.py" --workspace "." --language python --evidence-mo
 
 ### Phase 2/3: 写作交接文档 Agent 与代码 Agent 并行
 
-文档 Agent 与代码 Agent 并行执行，但文档 Agent 只生成写作交接提示词，不生成正式写作正文。文档 Agent 基于 `problem_brief.md`、`scoring_strategy.md`、`final_solution.json`、`model_spec.json`、`innovation_register.json`、`results/validation_summary.json`、图表叙事板和复现清单生成 `writer_prompt.md`。代码 Agent 先生成 `solution_tests.py` 或 `solution_tests.m`，再生成 `solution.py` 或 `solution.m`，并把所有结果和 `results/validation_summary.json` 写入 `results/`。可视化设计 Agent 生成 `figure_storyboard.md`、`figure_style.json` 和证据图组。
+文档 Agent 与代码 Agent 并行执行，但文档 Agent 只生成写作交接提示词，不生成正式写作正文。文档 Agent 基于 `problem_brief.md`、`scoring_strategy.md`、`final_solution.json`、`model_spec.json`、`innovation_register.json` 生成 `writer_prompt.md` 首轮草稿；`results/validation_summary.json`、图表叙事板和复现清单由 Phase 3/5 产出，Phase 2 首轮可缺省，在 Phase 5 定稿时补入。代码 Agent 先生成 `solution_tests.py` 或 `solution_tests.m`，再生成 `solution.py` 或 `solution.m`，并把所有结果和 `results/validation_summary.json` 写入 `results/`。可视化设计 Agent 生成 `figure_storyboard.md`、`figure_style.json` 和证据图组。
+
+验证证据必须由真实计算产生。模板默认的 `status: "NOT_VALIDATED"` 与 `passed: null` 会被 `evidence_checker.py` 和 `robustness_checker.py` 判为失败；确定性模型可对随机性相关条目声明 `{"status": "not_applicable", "rationale": ..., "alternative_validation": ...}`，但必须同时给出理由和替代验证方式。
 
 ### Phase 4: 多评委并行审查、独立复现与工具验证
 

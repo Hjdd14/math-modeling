@@ -1,4 +1,6 @@
 // Phase 2 & 3: 并行执行写作交接提示词和代码编写
+// ⚠️ DEMO —— 单步并行派发模板，只覆盖 Phase 2/3 的派发动作；不产出固定 JSON 产物、
+// 不做契约测试与验证，不能替代 references/workflow.md 的完整流程，不得作为交付依据。
 // 定位：可选宿主 Workflow 模板，依赖宿主提供 agent/parallel 全局函数。
 // 调用方式：Workflow({scriptPath: "workflows/phase2_3_parallel.js", args: {final_solution: {...}, language: "python"}})
 

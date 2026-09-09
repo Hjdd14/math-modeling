@@ -180,12 +180,12 @@ if ($targetSkillsDir -and $targetSkillsDir -ne "") {
                 New-Item -ItemType SymbolicLink -Path $target -Target $scriptDirFull -ErrorAction Stop | Out-Null
             }
             catch {
-                # Fallback to Junction (works without admin rights on Windows)
+                # Fallback to Junction (works without admin rights on Windows).
+                # Use the native PowerShell provider instead of shelling out to `cmd /c mklink`,
+                # so a failure surfaces as a real terminating error rather than being
+                # inferred indirectly from Test-Path.
                 Write-Warn2 "Symlink needs admin rights; using junction instead."
-                & cmd /c mklink /J "$target" "$scriptDirFull" 2>&1 | Out-Null
-                if (-not (Test-Path $target)) {
-                    throw "Junction creation also failed."
-                }
+                New-Item -ItemType Junction -Path $target -Target $scriptDirFull -ErrorAction Stop | Out-Null
             }
             Write-Ok "Link created. Your agent can now discover the skill at $target."
         }

@@ -24,6 +24,17 @@ ARTIFACT_FILES = {
     "results_dir": "results",
 }
 PHASE_ORDER = ["phase0", "phase1", "phase2", "phase3", "phase4", "phase5"]
+VALID_STATUSES = {
+    "pending",
+    "running",
+    "in_progress",
+    "completed",
+    "passed",
+    "failed",
+    "warning",
+    "skipped",
+    "blocked",
+}
 
 
 def now_iso() -> str:
@@ -52,10 +63,31 @@ def lock_path(workspace: str) -> Path:
 
 
 def resolve_workspace_path(workspace: str, path: str) -> Path:
+    """把产物路径解析到工作区内，并拒绝越界路径。
+
+    允许工作区内的绝对路径（调用方常直接传 Path 对象的字符串形式），
+    但拒绝任何解析后落在工作区之外的路径，例如 `../../etc/hosts`。
+    """
+    root = workspace_root(workspace)
     candidate = Path(path)
-    if candidate.is_absolute():
-        return candidate
-    return workspace_root(workspace) / candidate
+    resolved = candidate if candidate.is_absolute() else root / candidate
+    try:
+        resolved.resolve().relative_to(root)
+    except ValueError:
+        raise ValueError(f"产物路径超出工作区范围: {path}") from None
+    return resolved
+
+
+def validate_phase(phase: str) -> str:
+    if phase not in PHASE_ORDER:
+        raise ValueError(f"未知阶段: {phase}；可用阶段: {', '.join(PHASE_ORDER)}")
+    return phase
+
+
+def validate_status(status: str) -> str:
+    if status not in VALID_STATUSES:
+        raise ValueError(f"未知状态: {status}；可用状态: {', '.join(sorted(VALID_STATUSES))}")
+    return status
 
 
 class StateLock:
@@ -108,14 +140,20 @@ def _atomic_write_json(path: Path, state: dict):
 
 def artifact_info(path: Path) -> dict:
     exists = path.exists()
+    is_dir = exists and path.is_dir()
     info = {
         "path": str(path),
         "exists": exists,
-        "kind": "directory" if exists and path.is_dir() else "file",
+        "kind": "directory" if is_dir else "file",
     }
     if exists and path.is_file():
         stat = path.stat()
         info.update({"size": stat.st_size, "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat()})
+    if is_dir:
+        try:
+            info["entry_count"] = sum(1 for _ in path.iterdir())
+        except OSError:
+            info["entry_count"] = 0
     return info
 
 
@@ -185,8 +223,21 @@ def inspect_workspace(workspace: str, language: str = "python", base_state: dict
         inferred_phase = "phase2"
     if state["artifacts"].get("solution", {}).get("exists"):
         inferred_phase = "phase3"
-    if state["artifacts"].get("results_dir", {}).get("exists"):
+    # phase4 需要 results/ 内有真实产物，而不是仅存在空目录。
+    # init_state 会预建空 results/ 目录，若只判断目录存在，全新工作区会被误判为 phase4。
+    results_root = resolve_workspace_path(workspace, "results")
+    results_info = state["artifacts"].get("results_dir", {})
+    has_validation_summary = (results_root / "validation_summary.json").is_file()
+    has_result_files = bool(results_info.get("entry_count", 0))
+    if results_info.get("exists") and (has_validation_summary or has_result_files):
         inferred_phase = "phase4"
+    state["phase_inference"] = {
+        "inferred_phase": inferred_phase,
+        "writer_prompt_exists": bool(state["artifacts"].get("writer_prompt", {}).get("exists")),
+        "solution_exists": bool(state["artifacts"].get("solution", {}).get("exists")),
+        "results_entry_count": results_info.get("entry_count", 0),
+        "validation_summary_exists": has_validation_summary,
+    }
     state["current_phase"] = _max_phase(state.get("current_phase", "phase0"), inferred_phase)
     state["updated_at"] = now_iso()
     return state
@@ -222,6 +273,9 @@ def resume_state(workspace: str, language: str = "python") -> dict:
 
 
 def update_phase(workspace: str, phase: str, status: str) -> dict:
+    validate_phase(phase)
+    validate_status(status)
+
     def mutator(state):
         state["current_phase"] = phase
         state["phases"][phase] = {"status": status, "updated_at": now_iso()}
@@ -230,13 +284,17 @@ def update_phase(workspace: str, phase: str, status: str) -> dict:
 
 
 def record_artifact(workspace: str, name: str, path: str) -> dict:
+    info = artifact_info_for_workspace(workspace, path)
+
     def mutator(state):
-        state["artifacts"][name] = artifact_info_for_workspace(workspace, path)
+        state["artifacts"][name] = info
 
     return mutate_state(workspace, mutator)
 
 
 def record_tool_run(workspace: str, name: str, status: str, score=None, summary: str = "") -> dict:
+    validate_status(status)
+
     def mutator(state):
         state["tool_runs"].append({
             "name": name,
@@ -250,6 +308,9 @@ def record_tool_run(workspace: str, name: str, status: str, score=None, summary:
 
 
 def record_agent_run(workspace: str, phase: str, agent: str, role: str, status: str, summary: str, output_path: str = "") -> dict:
+    validate_phase(phase)
+    validate_status(status)
+
     def mutator(state):
         state["agent_runs"].append({
             "phase": phase,
@@ -278,27 +339,27 @@ def main():
 
     p_phase = subparsers.add_parser("phase", help="更新阶段状态")
     p_phase.add_argument("--workspace", required=True)
-    p_phase.add_argument("--phase", required=True)
-    p_phase.add_argument("--status", required=True)
+    p_phase.add_argument("--phase", required=True, help=f"阶段名，可用值: {', '.join(PHASE_ORDER)}")
+    p_phase.add_argument("--status", required=True, help=f"状态，可用值: {', '.join(sorted(VALID_STATUSES))}")
 
     p_artifact = subparsers.add_parser("artifact", help="记录产物")
     p_artifact.add_argument("--workspace", required=True)
     p_artifact.add_argument("--name", required=True)
-    p_artifact.add_argument("--path", required=True)
+    p_artifact.add_argument("--path", required=True, help="产物路径，必须位于工作区内")
 
     p_tool = subparsers.add_parser("tool-run", help="记录工具运行")
     p_tool.add_argument("--workspace", required=True)
     p_tool.add_argument("--name", required=True)
-    p_tool.add_argument("--status", required=True)
+    p_tool.add_argument("--status", required=True, help=f"状态，可用值: {', '.join(sorted(VALID_STATUSES))}")
     p_tool.add_argument("--score", type=float, default=None)
     p_tool.add_argument("--summary", default="")
 
     p_agent = subparsers.add_parser("agent-run", help="记录 Agent 运行")
     p_agent.add_argument("--workspace", required=True)
-    p_agent.add_argument("--phase", required=True)
+    p_agent.add_argument("--phase", required=True, help=f"阶段名，可用值: {', '.join(PHASE_ORDER)}")
     p_agent.add_argument("--agent", required=True)
     p_agent.add_argument("--role", required=True)
-    p_agent.add_argument("--status", required=True)
+    p_agent.add_argument("--status", required=True, help=f"状态，可用值: {', '.join(sorted(VALID_STATUSES))}")
     p_agent.add_argument("--summary", default="")
     p_agent.add_argument("--output-path", default="")
 

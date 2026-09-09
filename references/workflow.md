@@ -240,7 +240,11 @@ Phase 1 必须使用五视角建模 Agent。必须先生成 `problem_taxonomy`�
 
 ## Phase 2: 写作交接文档 Agent
 
-文档 Agent 与代码 Agent 并行执行。文档 Agent 不写正式论文正文，只整理后续写作 skill 可直接使用的 `writer_prompt.md`。它读取 `problem_brief.md`、`scoring_strategy.md`、`ambiguity_register.json`、`assumption_ledger.md`、`case_retrieval.json`、`model_selection_audit.json`、`model_spec.json`、`optimization_certificate.json`、`uncertainty_budget.json`、`validation_profile.json`、`symbol_table.json`、`baseline_solution.json`、`innovation_register.json`、`final_solution.json`、`figure_storyboard.md`、`results/validation_summary.json` 和 `reproducibility_manifest.json`，输出：
+文档 Agent 与代码 Agent 并行执行。文档 Agent 不写正式论文正文，只整理后续写作 skill 可直接使用的 `writer_prompt.md`。它读取 `problem_brief.md`、`scoring_strategy.md`、`ambiguity_register.json`、`assumption_ledger.md`、`case_retrieval.json`、`model_selection_audit.json`、`model_spec.json`、`optimization_certificate.json`、`uncertainty_budget.json`、`validation_profile.json`、`symbol_table.json`、`baseline_solution.json`、`innovation_register.json`、`final_solution.json`，输出首轮草稿。
+
+`figure_storyboard.md`、`results/validation_summary.json` 由并行的 Phase 3 产出，`reproducibility_manifest.json` 是 Phase 5 产物：**Phase 2 首轮允许这三项缺省**，不要为等待它们而阻塞并行；它们在 Phase 5 按本文件末尾的定稿要求补入。`writer_prompt.md` 因此是"Phase 2 草稿 + Phase 5 定稿"两段式产物。
+
+输出内容包括：
 
 - 模型主线和每问应答要点。
 - 代码与结果文件路径。
@@ -263,6 +267,10 @@ Phase 1 必须使用五视角建模 Agent。必须先生成 `problem_taxonomy`�
 - 生成 `results/output.csv` 或同等结构化结果。
 - 生成 `results/summary.json` 或同等摘要。
 - 生成 `results/validation_summary.json`，记录 baseline 对比、小规模 oracle 测试、solver 交叉验证、敏感性分析、关键不变量、失败模式、约束残差、最优性 gap、多初值不少于 3 次、随机种子不少于 3 个、bootstrap/置信区间置信水平至少 0.95 和参数扰动排名稳定性。
+- 每一项证据都必须由真实计算产生。模板默认的 `status: "NOT_VALIDATED"` 与 `passed: null` 会被 `evidence_checker.py`、`robustness_checker.py` 在所有模式下判为失败，不允许照抄模板充当验证结果。
+- 随机性相关要求（多初值、随机种子、bootstrap 区间、扰动排名稳定）按题型条件化：确定性精确枚举、确定性线性规划、最短路、解析解 ODE 等模型可显式声明不适用，格式为
+  `{"status": "not_applicable", "rationale": "为什么不适用", "alternative_validation": "改用哪种验证替代"}`。
+  两个字段缺任一即判失败；`constraint_residuals` 与 `optimality_gap` 对任何模型都可核验，不允许声明不适用。
 - 生成或更新 `data_validation.json`、`statistical_validation.json`、`optimization_certificate.json` 和 `validation_profile.json`，确保预测/机器学习题无目标泄漏、时间序列不用随机切分、预处理只在训练集拟合。
 - 生成 `figure_style.json` 与 `figure_storyboard.md`，再生成至少一张 `results/result_*.png` 图表。
 - Python 必须包含 `def main()`、`run_baseline()`、`run_known_case_tests()`、`run_sensitivity_analysis()`、`write_validation_summary()` 和 `if __name__ == "__main__": main()`。

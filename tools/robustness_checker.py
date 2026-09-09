@@ -17,6 +17,16 @@ ROBUSTNESS_ITEMS = [
     "bootstrap_confidence_interval",
     "perturbation_stability",
 ]
+# 占位标记：模板默认产出这些值，代表"尚未真实验证"，任何模式下都不算证据。
+PLACEHOLDER_MARKERS = ("NOT_VALIDATED", "UNVALIDATED", "REPLACE_ME", "TODO", "FIXME")
+NOT_APPLICABLE_STATUSES = {"not_applicable", "na", "n/a"}
+# 确定性模型可对随机性相关条目声明不适用，但必须给出理由和替代验证方式。
+NOT_APPLICABLE_ELIGIBLE = {
+    "multi_start",
+    "random_seed_stability",
+    "bootstrap_confidence_interval",
+    "perturbation_stability",
+}
 
 
 def output(result: dict):
@@ -60,6 +70,39 @@ def _explicit_failure(value) -> bool:
     if isinstance(value, list):
         return any(_explicit_failure(item) for item in value)
     return False
+
+
+def _has_placeholder(value) -> bool:
+    """判断证据条目是否仍是模板占位状态。"""
+    if isinstance(value, dict):
+        status = str(value.get("status", "")).strip().upper()
+        if any(marker in status for marker in PLACEHOLDER_MARKERS):
+            return True
+        if "passed" in value and value.get("passed") is None and not _is_not_applicable(value):
+            return True
+        return any(_has_placeholder(child) for child in value.values())
+    if isinstance(value, list):
+        return any(_has_placeholder(item) for item in value)
+    if isinstance(value, str):
+        return any(marker in value.strip().upper() for marker in PLACEHOLDER_MARKERS)
+    return False
+
+
+def _is_not_applicable(value) -> bool:
+    if not isinstance(value, dict):
+        return False
+    return str(value.get("status", "")).strip().lower() in NOT_APPLICABLE_STATUSES
+
+
+def _not_applicable_justified(value) -> tuple[bool, str]:
+    """not_applicable 必须同时给出理由和替代验证方式，否则等同于跳过验证。"""
+    rationale = value.get("rationale") or value.get("reason")
+    alternative = value.get("alternative_validation") or value.get("alternative")
+    if not (isinstance(rationale, str) and rationale.strip()):
+        return False, "缺少 rationale：必须说明为什么该验证项不适用。"
+    if not (isinstance(alternative, str) and alternative.strip()):
+        return False, "缺少 alternative_validation：必须说明改用哪种验证方式替代。"
+    return True, ""
 
 
 def _as_float(value, default=None):
@@ -191,6 +234,40 @@ def check_robustness(workspace: str, mode: str = "standard") -> dict:
             _add_issue(issues, "missing_robustness_item", f"缺少数值鲁棒性证据: {item}。", severity, item=item)
             continue
         evidence_items_checked += 1
+
+        # 占位证据优先判定：模板默认值不能当作验证结果，任何模式都判失败。
+        if _has_placeholder(value):
+            checks.append({"name": item, "passed": False, "placeholder": True})
+            _add_issue(
+                issues,
+                "placeholder_evidence",
+                f"{item} 仍是模板占位状态（NOT_VALIDATED/TODO/passed=null），必须用真实计算替换。",
+                item=item,
+            )
+            continue
+
+        # 确定性模型可显式声明不适用，但必须给出理由与替代验证。
+        if _is_not_applicable(value):
+            if item not in NOT_APPLICABLE_ELIGIBLE:
+                checks.append({"name": item, "passed": False, "not_applicable": True})
+                _add_issue(
+                    issues,
+                    "not_applicable_not_allowed",
+                    f"{item} 不允许声明 not_applicable：约束残差与最优性 gap 对任何模型都可核验。",
+                    item=item,
+                )
+                continue
+            justified, reason = _not_applicable_justified(value)
+            checks.append({"name": item, "passed": justified, "not_applicable": True})
+            if not justified:
+                _add_issue(
+                    issues,
+                    "not_applicable_without_justification",
+                    f"{item} 声明 not_applicable 但{reason}",
+                    item=item,
+                )
+            continue
+
         failed = _explicit_failure(value)
         threshold_issues = _numeric_threshold_issues(item, value) if mode in STRICT_MODES else []
         checks.append({"name": item, "passed": not failed and not threshold_issues})

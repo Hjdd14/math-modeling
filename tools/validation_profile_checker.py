@@ -37,6 +37,8 @@ PROFILE_REQUIREMENTS = {
     "physical_mechanism": ["units", "conservation", "boundary_conditions", "known_special_case"],
     "policy_decision": ["weights_sum_to_one", "ranking_stability", "scenario_explanation"],
 }
+# 题型天然不涉及某项验证时可显式声明不适用，但必须同时提供 rationale 与 alternative_validation。
+NOT_APPLICABLE_STATUSES = {"not_applicable", "na", "n/a"}
 
 
 def output(result: dict):
@@ -58,6 +60,23 @@ def _present(value) -> bool:
     if isinstance(value, (str, list, dict)):
         return len(value) > 0
     return True
+
+
+def _is_not_applicable(value) -> bool:
+    if not isinstance(value, dict):
+        return False
+    return str(value.get("status", "")).strip().lower() in NOT_APPLICABLE_STATUSES
+
+
+def _not_applicable_justified(value) -> tuple[bool, str]:
+    """not_applicable 必须同时给出理由和替代验证方式。"""
+    rationale = value.get("rationale") or value.get("reason")
+    alternative = value.get("alternative_validation") or value.get("alternative")
+    if not (isinstance(rationale, str) and rationale.strip()):
+        return False, "缺少 rationale：必须说明为什么该验证项不适用。"
+    if not (isinstance(alternative, str) and alternative.strip()):
+        return False, "缺少 alternative_validation：必须说明改用哪种验证方式替代。"
+    return True, ""
 
 
 def _get_path(payload: dict, dotted: str):
@@ -137,6 +156,22 @@ def check_validation_profile(workspace: str, mode: str = "standard") -> dict:
     for field in requirements:
         value = _get_path(evidence, field)
         ok = _present(value)
+        not_applicable = _is_not_applicable(value)
+        if not_applicable:
+            # 题型天然不涉及该验证时可显式声明，但必须给出理由和替代验证方式，
+            # 否则 not_applicable 就等于无成本地跳过验证。
+            justified, reason = _not_applicable_justified(value)
+            checks.append({"name": f"field_{field}", "passed": justified, "not_applicable": True})
+            if not justified:
+                _add_issue(
+                    issues,
+                    "not_applicable_without_justification",
+                    f"{profile} 的 {field} 声明 not_applicable 但{reason}",
+                    severity=severity,
+                    field=field,
+                    profile=profile,
+                )
+            continue
         if isinstance(value, dict) and value.get("passed") is False:
             ok = False
         checks.append({"name": f"field_{field}", "passed": ok})

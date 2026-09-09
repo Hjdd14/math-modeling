@@ -22,6 +22,24 @@ def error(message: str, code: int = 1):
     sys.exit(code)
 
 
+def _resolve_sheet_label(file_path: str, ext: str, sheet_name: str = None) -> str:
+    """返回用于标注问题所属工作表的真实名称。
+
+    pandas 在 sheet_name=None 时默认只读第一个工作表，直接标注 "Sheet1"
+    会在多工作表 Excel 上给出错误的工作表名。
+    """
+    if sheet_name:
+        return sheet_name
+    if ext in (".xlsx", ".xls"):
+        try:
+            names = pd.ExcelFile(file_path).sheet_names
+            if names:
+                return str(names[0])
+        except Exception:
+            pass
+    return "Sheet1"
+
+
 def read_data_structure(file_path: str) -> dict:
     """读取数据文件结构"""
     if not os.path.exists(file_path):
@@ -158,6 +176,7 @@ def check_quality(file_path: str, sheet_name: str = None) -> dict:
     missing_values = []
     outliers = []
     type_issues = []
+    sheet_label = _resolve_sheet_label(file_path, ext, sheet_name)
 
     for col in df.columns:
         col_data = df[col]
@@ -165,7 +184,7 @@ def check_quality(file_path: str, sheet_name: str = None) -> dict:
         if missing_count > 0:
             missing_rows = [int(i) + 2 for i in col_data[col_data.isna()].index]
             missing_values.append({
-                "sheet": sheet_name or "Sheet1",
+                "sheet": sheet_label,
                 "column": col,
                 "count": missing_count,
                 "rows": missing_rows[:20]
@@ -181,7 +200,7 @@ def check_quality(file_path: str, sheet_name: str = None) -> dict:
                     outlier_mask = z_scores > 3
                     for idx in outlier_mask[outlier_mask].index:
                         outliers.append({
-                            "sheet": sheet_name or "Sheet1",
+                            "sheet": sheet_label,
                             "column": col,
                             "row": int(idx) + 2,
                             "value": round(float(numeric_data[idx]), 4),
@@ -193,7 +212,7 @@ def check_quality(file_path: str, sheet_name: str = None) -> dict:
             types = non_null.apply(type).unique()
             if len(types) > 1:
                 type_issues.append({
-                    "sheet": sheet_name or "Sheet1",
+                    "sheet": sheet_label,
                     "column": col,
                     "types_found": [t.__name__ for t in types]
                 })
@@ -205,21 +224,33 @@ def check_quality(file_path: str, sheet_name: str = None) -> dict:
     outlier_count = len(outliers)
     type_issue_count = len(type_issues)
 
-    if total_cells == 0:
-        quality_score = 100.0
+    empty_data = df.shape[0] == 0
+    quality_notes = []
+    if empty_data:
+        # 空数据不可能是高质量数据：没有任何行可供建模或验证。
+        # 旧实现在 total_cells == 0 时返回 100.0，会让空附件在简报里显示满分。
+        quality_score = 0.0
+        quality_notes.append("数据为空（0 行），无法评估质量；请确认附件是否正确或解析是否失败。")
     else:
         missing_penalty = (missing_cells / total_cells) * 30
         outlier_penalty = min((outlier_count / max(total_cells, 1)) * 100, 30)
         type_penalty = min(type_issue_count * 5, 20)
         dup_penalty = min((duplicate_rows / max(df.shape[0], 1)) * 20, 20)
         quality_score = max(0, round(100 - missing_penalty - outlier_penalty - type_penalty - dup_penalty, 2))
+        if df.shape[0] <= 2:
+            quality_notes.append("样本量不足（≤2 行），未执行离群点检测，质量评分参考价值有限。")
 
     return {
+        "sheet": sheet_label,
+        "rows": int(df.shape[0]),
         "missing_values": missing_values,
         "outliers": outliers[:50],
         "type_issues": type_issues,
         "duplicate_rows": duplicate_rows,
         "unit_issues": [],
+        "empty_data": empty_data,
+        "outlier_detection_applied": df.shape[0] > 2,
+        "quality_notes": quality_notes,
         "quality_score": quality_score
     }
 

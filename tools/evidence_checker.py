@@ -15,11 +15,61 @@ from pathlib import Path
 from typing import Any
 
 
-STRICT_MODES = {"strict", "hard", "complete", "full"}
+STRICT_MODES = {"strict", "hard", "complete", "full", "excellence"}
+# 占位标记：模板默认产出这些值，代表"尚未真实验证"。
+# 占位证据在任何模式下都不是合法证据，因此命中即判 error。
+PLACEHOLDER_MARKERS = ("NOT_VALIDATED", "UNVALIDATED", "REPLACE_ME", "TODO", "FIXME")
+NOT_APPLICABLE_STATUSES = {"not_applicable", "na", "n/a"}
 
 
 def output(result: dict):
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+def _find_placeholders(value: Any, path: str = "") -> list[str]:
+    """定位仍处于占位状态的证据字段。"""
+    hits: list[str] = []
+    if isinstance(value, dict):
+        status = str(value.get("status", "")).strip().upper()
+        if any(marker in status for marker in PLACEHOLDER_MARKERS):
+            hits.append(path or "<root>")
+        elif "passed" in value and value.get("passed") is None and status not in {
+            s.upper() for s in NOT_APPLICABLE_STATUSES
+        }:
+            hits.append(f"{path or '<root>'}.passed=null")
+        for key, child in value.items():
+            hits.extend(_find_placeholders(child, f"{path}.{key}" if path else str(key)))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            hits.extend(_find_placeholders(item, f"{path}[{index}]"))
+    elif isinstance(value, str):
+        upper = value.strip().upper()
+        if any(marker in upper for marker in PLACEHOLDER_MARKERS):
+            hits.append(path or "<root>")
+    return hits
+
+
+def _placeholder_check(payload: Any) -> dict:
+    hits = sorted(set(_find_placeholders(payload)))
+    if hits:
+        return {
+            "name": "placeholder_evidence",
+            "passed": False,
+            "severity": "error",
+            "detail": (
+                "存在未替换的占位证据（模板默认值），不能作为验证结果: "
+                + ", ".join(hits[:10])
+                + (f" 等 {len(hits)} 处" if len(hits) > 10 else "")
+            ),
+            "fields": hits,
+        }
+    return {
+        "name": "placeholder_evidence",
+        "passed": True,
+        "severity": "info",
+        "detail": "ok",
+        "fields": [],
+    }
 
 
 def _severity_for_missing(mode: str) -> str:
@@ -146,7 +196,8 @@ def check_evidence(workspace: str, mode: str = "standard") -> dict:
     """检查工作区中的 validation_summary.json。
 
     standard 模式向后兼容：缺少新证据文件或新结构时给 warning。
-    strict/hard/complete/full 模式用于难题或完整验证：缺少证据即失败。
+    strict/hard/complete/full/excellence 模式用于难题或完整验证：缺少证据即失败。
+    未替换的模板占位证据在所有模式下都判失败。
     """
     normalized_mode = mode.lower()
     root = Path(workspace)
@@ -201,6 +252,7 @@ def check_evidence(workspace: str, mode: str = "standard") -> dict:
 
     oracle_value = payload.get("oracle_tests", payload.get("known_case_tests"))
     checks = [
+        _placeholder_check(payload),
         _section_check("baseline_comparison", payload.get("baseline_comparison"), normalized_mode),
         _section_check("oracle_tests", oracle_value, normalized_mode),
         _section_check("solver_cross_checks", payload.get("solver_cross_checks"), normalized_mode),
@@ -234,8 +286,8 @@ def main():
     parser.add_argument(
         "--mode",
         default="standard",
-        choices=["standard", "strict", "hard", "complete", "full"],
-        help="standard 向后兼容；strict/hard/complete/full 缺证据即失败",
+        choices=["standard", "strict", "hard", "complete", "full", "excellence"],
+        help="standard 向后兼容；strict/hard/complete/full/excellence 缺证据即失败",
     )
     args = parser.parse_args()
 

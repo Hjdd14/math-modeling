@@ -41,7 +41,8 @@
     "results_dir": {
       "path": "results",
       "exists": true,
-      "kind": "directory"
+      "kind": "directory",
+      "entry_count": 5
     },
     "solution": {
       "path": "solution.py",
@@ -54,5 +55,12 @@
   "tool_runs": [],
   "agent_runs": [],
   "issues": [],
-  "updated_at": "2026-06-30T06:20:12.240189+00:00"
+  "updated_at": "2026-09-09T10:38:46.612099+00:00",
+  "phase_inference": {
+    "inferred_phase": "phase4",
+    "writer_prompt_exists": true,
+    "solution_exists": true,
+    "results_entry_count": 5,
+    "validation_summary_exists": true
+  }
 }

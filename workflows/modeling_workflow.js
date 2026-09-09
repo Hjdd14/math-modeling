@@ -1,15 +1,21 @@
 // workflows/modeling_workflow.js
-// 数学建模全流程工作流（优化版）
+// ⚠️ DEMO ONLY —— 并行派发骨架示例，不是本 skill 的正式流程。
+// 本文件只演示"如何并行派发多个建模 Agent 并做共识循环"，刻意保持精简。
+// 它不实现 Phase 0-5 完整流程，缺少：problem_brief 生成、题意审计与歧义登记、
+// 题型分类、资料库检索、baseline、固定 JSON 产物、契约测试、独立复现、
+// 五类评委并行审查、合规复现、状态持久化。
+// 不得把本文件的执行结果当作交付依据或验证证据。
+// 正式流程见 references/workflow.md；产物清单见 SKILL.md「固定产物」。
 // 定位：可选宿主 Workflow 模板，依赖宿主提供 bash/agent/parallel/phase/log 全局函数。
 // 调用方式：通过 Workflow 工具执行；不要承诺可用 node 直接运行。
 
 export const meta = {
   name: 'math-modeling-optimized',
-  description: '数学建模全流程（优化版）：Python工具 + 并行化 + 多Agent共识',
+  description: '【DEMO】并行派发骨架示例：Python工具 + 并行化 + 多Agent共识（非完整 Phase 0-5 流程）',
   phases: [
     { title: 'Phase 0: 数据提取' },
     { title: 'Phase 1: 建模共识' },
-    { title: 'Phase 2-3: 并行文档与代码' },
+    { title: 'Phase 2-3: 并行写作交接与代码' },
     { title: 'Phase 4: 并行审查' },
     { title: 'Phase 5: 归档' }
   ]
@@ -153,11 +159,13 @@ async function main(args) {
   )
 
   // Phase 2-3: 并行
-  phase('Phase 2-3: 并行文档与代码')
-  const [document, code] = await parallel([
+  phase('Phase 2-3: 并行写作交接与代码')
+  // 本 skill 不生成正式写作正文（见 SKILL.md 核心约束 5）：
+  // 文档 Agent 只产出 writer_prompt.md 交接材料，正文交给后续独立写作 skill。
+  const [writerPrompt, code] = await parallel([
     () => agent(
-      `根据建模方案生成 LaTeX 文档：\n${JSON.stringify(finalSolution)}`,
-      { label: 'document_agent' }
+      `根据建模方案生成 writer_prompt.md 写作交接提示词（不要生成正式论文正文、不要生成 LaTeX 文档）：\n${JSON.stringify(finalSolution)}`,
+      { label: 'writer_prompt_agent' }
     ),
     () => agent(
       `根据建模方案编写 ${language} 代码：\n${JSON.stringify(finalSolution)}`,
@@ -169,7 +177,7 @@ async function main(args) {
   phase('Phase 4: 并行审查')
   const [syntaxCheck, logicCheck, outputCheck] = await parallel([
     () => agent(`语法审查以下代码：\n${code}`, { label: 'syntax_check' }),
-    () => agent(`逻辑审查：代码与文档一致性\n代码：${code}\n文档：${document}`, { label: 'logic_check' }),
+    () => agent(`逻辑审查：代码与建模方案一致性\n代码：${code}\n方案：${JSON.stringify(finalSolution)}`, { label: 'logic_check' }),
     () => agent(`输出审查：检查结果完整性\n代码：${code}`, { label: 'output_check' })
   ])
 
@@ -181,8 +189,10 @@ async function main(args) {
   log(`最终核查评分: ${finalCheck.score}/100`)
 
   return {
+    demo_only: true,
+    demo_note: '本工作流仅演示并行派发骨架，未执行完整 Phase 0-5 流程，不得作为交付依据。',
     final_solution: finalSolution,
-    document: document,
+    writer_prompt: writerPrompt,
     code: code,
     consensus_rounds: round,
     consensus_history: consensusHistory,

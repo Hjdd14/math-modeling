@@ -200,6 +200,12 @@ python "tools/robustness_checker.py" --workspace "." --mode excellence
 
 检查 `results/validation_summary.json` 中的数值鲁棒性证据：约束残差、最优性 gap、多初值不少于 3 次、随机种子不少于 3 个、bootstrap/置信区间置信水平至少 0.95 和参数扰动排名稳定性。`standard` 模式缺新字段 warning；`excellence` 模式缺字段失败；任一字段显式 `passed=false` 所有模式失败。
 
+两条与"声明式通过"直接相关的判定：
+
+- **占位证据一律失败**：条目仍带 `status: "NOT_VALIDATED"`/`TODO`/`REPLACE_ME` 或 `passed: null` 时，所有模式都报 `placeholder_evidence` 错误。模板默认值不是证据，照抄模板不做替换会在此处被拦下。
+- **按题型可声明不适用**：确定性模型可对 `multi_start`、`random_seed_stability`、`bootstrap_confidence_interval`、`perturbation_stability` 写
+  `{"status": "not_applicable", "rationale": "...", "alternative_validation": "..."}`；缺 `rationale` 或 `alternative_validation` 报 `not_applicable_without_justification`。`constraint_residuals` 与 `optimality_gap` 对任何模型都可核验，声明不适用会报 `not_applicable_not_allowed`。
+
 ## figure_auditor.py
 
 ```bash
@@ -343,7 +349,9 @@ python "tools/pipeline_check.py" --workspace "." --language python --evidence-mo
 python "tools/pipeline_check.py" --workspace "." --language python --evidence-mode strict --quality-mode excellence --online-source-materials
 ```
 
-总控验证会串联代码运行、图表、brief 核查、evidence check、来源总索引、离线来源新鲜度、案例检索、奖项级上限产物、模型选择、优化证书、不确定性预算、题型验证 profile、数据泄漏、统计验证、1.2.0 质量闭环、writer prompt、创新筛选、评委组审查和合规检查。加 `--online-source-materials` 时额外运行资料内容读取联网深扫。新正式流程不把正式写作正文作为必需产物。`passed == false` 时必须修正后重跑。默认 `--evidence-mode standard` 与 `--quality-mode standard` 兼容增量工作区；难题、完整交付或正式竞赛结果使用 `--evidence-mode strict`；奖项级交付使用 `--quality-mode excellence`。
+总控验证会串联代码运行、图表、brief 核查、evidence check、来源总索引、离线来源新鲜度、案例检索、奖项级上限产物、模型选择、优化证书、不确定性预算、题型验证 profile、数据泄漏、统计验证、质量闭环产物、writer prompt、创新筛选、评委组审查和合规检查，并对 `model_decision.md` 中的 LaTeX 公式做提示性检查（`latex_advisory`，只产出 warning，永不翻转 `passed`；需要判失败请单独运行 `tools/latex_validator.py`）。加 `--online-source-materials` 时额外运行资料内容读取联网深扫。新正式流程不把正式写作正文作为必需产物。`passed == false` 时必须修正后重跑。
+
+默认 `--evidence-mode standard` 与 `--quality-mode standard` 只做兼容旧工作区的结构自检：缺失的质量闭环产物只报 warning，`passed: true` 仅表示没有硬性错误，**不代表产物齐全**。产物齐备情况读返回值中的 `artifact_completeness`（`recommended_missing` 列出缺哪些固定产物、`required_missing` 列出硬性缺失）与 `status`（`pass` / `pass_with_warnings` / `fail`）；`warned_checks` 列出所有产生 warning 的检查项。难题、完整交付或正式竞赛结果使用 `--evidence-mode strict`；奖项级最终交付使用 `--quality-mode excellence`。
 
 ## workflow_runner.py
 
