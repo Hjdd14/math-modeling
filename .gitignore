@@ -56,7 +56,21 @@ Thumbs.db
 modeling_state.json.lock
 /results/
 
+# 决策板渲染视图：由 design_board.json 重新生成，不该进版本库。
+# design_board.json 本身是唯一真实来源，必须入库；design_rounds/ 是决策回执证据，也要入库。
+design_board.md
+design_board.html
+design_choices.xlsx
+design_board_submission.json
+# 但仓库内的示例与夹具要保留（negation 必须放在上面的忽略规则之后）
+!tests/test_data/design_board.md
+!examples/solved-python/design_board.md
+!examples/design-board-sample/*.md
+!examples/design-board-sample/*.html
+!examples/design-board-sample/*.xlsx
+
 # Temporary files
 *.tmp
 *.temp
 tmp/
+.tmp_*/

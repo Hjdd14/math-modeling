@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "board_id": "b-2026-06-28-solved-python-green-production",
+  "board_sha256": "be7f9fa870e335ec14f030960bf80839d1944af0f9f8f0a6e8996082ba5fe330",
+  "language": "python",
+  "created_at": "2026-06-28T10:00:00+00:00",
+  "revision": 2,
+  "problem_summary": {
+    "title": "绿色生产计划：整数产量最大化总利润",
+    "source": "problem.md（合成示例）",
+    "questions": [
+      "问题一：在工时 120h、材料 160kg、碳排 70kgCO2 上限内确定 A/B 产品整数产量，使总利润最大"
+    ],
+    "key_ambiguities": [
+      {
+        "id": "A1",
+        "severity": "low",
+        "issue": "是否允许只生产一种产品",
+        "resolution": "允许；非负整数即包含 0",
+        "resolved": true
+      }
+    ]
+  },
+  "mindmap": {
+    "format": "mermaid",
+    "source": "graph LR\n  P[绿色生产计划] --> Q1[问题一 整数产量]\n  Q1 --> O1[O1 整数线性规划（枚举/ILP） ⭐]\n  Q1 --> O2[O2 贪心 + 爬山局部搜索]\n  Q1 --> O3[O3 随机采样 100 个可行解]\n  O1 --> V[枚举 oracle 验证]\n  O1 --> B[baseline 对比]"
+  },
+  "questions": [
+    {
+      "id": "Q1",
+      "goal": "确定 A、B 产品非负整数产量，在工时 120h、材料 160kg、碳排 70kg 上限内最大化总利润",
+      "options": [
+        {
+          "id": "O1",
+          "name": "整数线性规划（枚举/ILP）",
+          "tier": "recommended",
+          "rationale": "3 个线性约束、2 个整数变量，可行域仅 1071 个整点，枚举即可在毫秒级证明全局最优",
+          "source_ref": {
+            "type": "method_card",
+            "ref": "OPT-01",
+            "tier": "tier_a",
+            "verified": true,
+            "note": "references/award_playbook.md#方法卡 OPT-01 线性规划基线"
+          },
+          "complexity": "O(可行整点数)；本例 1071 个点，实测 4.27 ms",
+          "dependencies": [],
+          "risk": "若变量规模增至 1e5 以上，枚举不可行，需换 HiGHS/CBC；评委可能要求给出 LP 下界",
+          "mini_trial": {
+            "sample": "全量可行域（1071 个整点）",
+            "output": {
+              "objective": 2175,
+              "x_a": 20,
+              "x_b": 25,
+              "feasible": true
+            },
+            "seconds": 0.00427,
+            "reproduce_cmd": "python solution.py"
+          }
+        },
+        {
+          "id": "O2",
+          "name": "贪心 + 爬山局部搜索",
+          "tier": "alternative",
+          "rationale": "实现最简单、可解释性强，适合作为 baseline",
+          "source_ref": {
+            "type": "method_card",
+            "ref": "OPT-02",
+            "tier": "tier_a",
+            "verified": true,
+            "note": "references/award_playbook.md#方法卡 OPT-02 整数规划与启发式修复"
+          },
+          "complexity": "O(n)，实测 0.037 ms",
+          "dependencies": [],
+          "risk": "被困在局部最优：本例只能到 2120，比最优低 55（2.53%）；无法证明 gap",
+          "mini_trial": {
+            "sample": "全量可行域（贪心路径）",
+            "output": {
+              "objective": 2120,
+              "x_a": 53,
+              "x_b": 0,
+              "feasible": true
+            },
+            "seconds": 3.7e-05,
+            "reproduce_cmd": "python solution.py --method greedy"
+          }
+        },
+        {
+          "id": "O3",
+          "name": "随机采样 100 个可行解",
+          "tier": "alternative",
+          "rationale": "无须建模，用于快速估计可行域量级与解的上界范围",
+          "source_ref": {
+            "type": "method_card",
+            "ref": "OPT-03",
+            "tier": "tier_b",
+            "verified": true,
+            "note": "references/award_playbook.md#方法卡 OPT-03 多阶段调度（仅借用采样思想）"
+          },
+          "complexity": "O(N)，N=100 采样，实测 4.24 ms（含构建可行域）",
+          "dependencies": [
+            "numpy"
+          ],
+          "risk": "无最优性保证：本例采样 100 个点最好只到 2170，比最优低 5；无法回答『为什么是这个解』",
+          "mini_trial": {
+            "sample": "随机种子 42，采样 100 个可行点",
+            "output": {
+              "objective": 2170,
+              "x_a": 24,
+              "x_b": 22,
+              "feasible": true
+            },
+            "seconds": 0.00424,
+            "reproduce_cmd": "python solution.py --method sample --seed 42"
+          }
+        }
+      ],
+      "user_choice": "O1",
+      "user_locked": true,
+      "user_comment": "用 O1，但要求给出 LP 松弛下界和 gap，方便写论文时说明最优性。",
+      "confirmed": true
+    }
+  ],
+  "pending_decisions": [],
+  "no_change_rounds": 2,
+  "confirmed": true,
+  "confirmed_at": "2026-06-28T12:00:00+00:00",
+  "confirmed_by": "user",
+  "receipt_origin": "browser-submit",
+  "receipt_nonce": "9f2c7a41-3b8e-4d15-a7c6-1e0b5f9d2a83",
+  "confirm_code": "BE7F",
+  "confirm_attested": true,
+  "history": [
+    {
+      "round": 1,
+      "at": "2026-06-28T11:30:00+00:00",
+      "board_sha256": "be7f9fa870e335ec14f030960bf80839d1944af0f9f8f0a6e8996082ba5fe330",
+      "user_edited": true,
+      "changes": [
+        {
+          "path": "questions[0].user_choice",
+          "from": "O2",
+          "to": "O1"
+        },
+        {
+          "path": "questions[0].user_comment",
+          "op": "added",
+          "value": "用 O1，但要求给出 LP 松弛下界和 gap。"
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "at": "2026-06-28T12:00:00+00:00",
+      "board_sha256": "be7f9fa870e335ec14f030960bf80839d1944af0f9f8f0a6e8996082ba5fe330",
+      "user_edited": false,
+      "changes": []
+    }
+  ]
+}

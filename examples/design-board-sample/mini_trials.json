@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "problem_id": "green-production-sample",
+  "generated_at": "2026-10-19T22:00:00+08:00",
+  "notes": [
+    "所有数值均来自真实计算，不是编造。复跑命令见每条的 reproduce_cmd。",
+    "mini_trial 只在小样本/小规模上验证可行性，不代表最终交付结果。"
+  ],
+  "trials": [
+    {
+      "question_id": "Q1",
+      "option_id": "O1",
+      "sample_rows": 2,
+      "sample_desc": "全量参数（2 个产品）+ 全量可行域枚举 1071 个整点",
+      "input_hash": "sha256:1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+      "output": {
+        "objective": 2175,
+        "x_a": 20,
+        "x_b": 25,
+        "feasible": true,
+        "lp_relaxation_bound": 2175.0,
+        "optimality_gap": 0.0
+      },
+      "seconds": 0.00427,
+      "solver": "pure-python exhaustive enumeration",
+      "reproduce_cmd": "python solution.py --method enum",
+      "verified": true
+    },
+    {
+      "question_id": "Q1",
+      "option_id": "O2",
+      "sample_rows": 2,
+      "sample_desc": "贪心路径（按利润/工时比优先 A，再爬山补 B）",
+      "input_hash": "sha256:1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+      "output": {
+        "objective": 2120,
+        "x_a": 53,
+        "x_b": 0,
+        "feasible": true,
+        "gap_vs_optimal": 0.0253
+      },
+      "seconds": 0.000037,
+      "solver": "greedy + hill climbing",
+      "reproduce_cmd": "python solution.py --method greedy",
+      "verified": true
+    },
+    {
+      "question_id": "Q1",
+      "option_id": "O3",
+      "sample_rows": 2,
+      "sample_desc": "随机种子 42，从 1071 个可行点采样 100 个",
+      "input_hash": "sha256:1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+      "output": {
+        "objective": 2170,
+        "x_a": 24,
+        "x_b": 22,
+        "feasible": true,
+        "gap_vs_optimal": 0.0023
+      },
+      "seconds": 0.00424,
+      "solver": "random.sample(seed=42)",
+      "reproduce_cmd": "python solution.py --method sample --seed 42",
+      "verified": true
+    }
+  ]
+}

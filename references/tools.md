@@ -119,6 +119,117 @@ python "tools/brief_completeness_checker.py" --workspace "." --mode excellence
 
 检查 `problem_brief.md` 是否仍残留占位符，并确认目标、约束和输出要求已提取。该工具只检查题意审计是否完整，不替代人工理解原题。
 
+## design_board.py
+
+```bash
+python "tools/design_board.py" render --workspace "." [--format md|html|xlsx|all]
+python "tools/design_board.py" ingest --workspace "." --from "user_submission.json"
+python "tools/design_board.py" ingest --workspace "." --from "design_choices.xlsx"
+python "tools/design_board.py" status --workspace "."
+python "tools/design_board.py" confirm --workspace "."
+python "tools/design_board.py" confirm --workspace "." --apply
+python "tools/design_board.py" confirm --workspace "." --apply --skip-interactive --reason "用户要求跳过"
+python "tools/design_board.py" serve --workspace "." [--port 8765] [--no-browser] [--once]
+```
+
+决策板工具，主流程零第三方依赖。`render` 计算 `board_sha256` 与 4 位确认码并写回 JSON；`ingest` 读取用户提交并生成 `design_rounds/round_NNN.json`，自动维护 `no_change_rounds`；`status` 输出收敛进度与 `ready_to_confirm`；`confirm` 默认 dry-run，`--apply` 时要求输入视图上的 4 位确认码（环境变量 `MM_CONFIRM_CODE` 供 CI 使用，此时 `confirmed_by: "ci"`）。
+
+**渲染格式**：
+
+| `--format` | 产物 | 依赖 |
+|---|---|---|
+| `md`（默认） | `design_board.md`（Mermaid 导图 + 候选对比表 + 确认码） | 无 |
+| `xlsx` | `design_choices.xlsx`（7 工作表：总览/待决策/权重/打分/来源/批注/说明，带下拉、单元格保护、条件格式） | `openpyxl` |
+| `html` | `design_board.html`（单文件离线，内联 SVG 导图，零外链） | 无 |
+| `all` | 以上全部 | 按需 |
+
+请求的格式缺少对应模块或依赖时**不中断**：跳过该格式并在输出 `skipped` 里说明原因，其余格式照常产出。
+
+**本地回传服务器（`serve`）**：
+
+```bash
+python "tools/design_board.py" serve --workspace "."
+# 打印 http://127.0.0.1:<port>/ 并（默认）自动打开浏览器
+```
+
+- 只监听 `127.0.0.1`，不暴露到局域网；
+- 页面里注入**一次性随机 token**，服务端校验 `X-MM-Token` 头。这挡住"恶意网页用表单 POST 到 localhost 伪造回执"——跨源表单发不出自定义头；
+- `GET /api/ping` 探测、`GET /api/board` 取板、`POST /api/submit` 写回执；
+- **回执走 `apply_submission()`**，与命令行 `ingest` 同一条校验路径，网页提交绕不过任何规则；
+- 页面打开**不当服务器**时（直接双击 file://），提交自动降级为下载 `design_board_submission.json`；
+- `--once` 收到第一份回执即退出，便于脚本化；
+- 页面上的选择即时存 `localStorage`，刷新/误关不丢。
+
+**从 Excel 回读**：`ingest --from design_choices.xlsx` 按表头文字定位「题号 / 当前选择 / 批注」列，转成回执信封，与 JSON 回执走同一套校验与落盘逻辑。用户在 Excel 里改选即等于一次正常 ingest。
+
+**写权限红线**：`ingest` 不得写 `confirmed` / `confirmed_at` / `confirmed_by` / `confirm_code` / `confirm_attested`；这些只能由 `confirm` 写。AI 不得代用户执行 `confirm --apply`，也不得代填确认码。
+
+**哈希口径**：内容哈希只锚定候选方案内容（题意/导图/每题候选及其理由·风险·试算·来源），**排除**确认状态与用户选择（`board_sha256` / `confirm_code` / `confirm_*` / `confirmed_*` / `receipt_*` / `revision` / `no_change_rounds` / `history` / `skip_reason` 与各题 `user_choice`/`user_comment`/`user_locked`/`confirmed`）。因此用户改选择不需重新确认，AI 改候选内容则哈希必变、必须重新确认。完整算法见 `docs/DESIGN_GATE_PLAN.md` §4.2.1。
+
+`--skip-interactive` 是逃生口：写入 `confirmed_by: "user_non_interactive"`，checker 会标 `confirm_not_attested`（warning，留痕不阻断）。
+
+## mini_trial.py
+
+```bash
+python "tools/mini_trial.py" run --workspace "." --trial "python solution.py --method enum" --label "O1 枚举"
+python "tools/mini_trial.py" status --workspace "."
+```
+
+跑**真实试算**并落 `mini_trials.json`。决策板要求每个候选都有真实数值，这个工具负责把它跑出来、测耗时、解析 stdout 的 JSON，并**追加**写盘（同一条命令跑两次会留两条带时间戳的记录）。`trial_status` 汇总总数/成功数/是否有数值输出，`ready` 为真表示每条都成功且有数值。
+
+超时用 `Popen` + `taskkill /T`（Windows）/ `killpg`（POSIX）回收整棵进程树——只杀 shell 会让孙进程占着管道，超时形同虚设。
+
+## migrate_workspace.py
+
+```bash
+python "tools/migrate_workspace.py" --workspace "."
+python "tools/migrate_workspace.py" --workspace "." --apply
+```
+
+给**旧工作区**（设计闸门上线前就存在的项目）补一个最小可用的 `design_board.json` 骨架，让它能走 render → 确认流程。
+
+- 默认 dry-run：只打印将生成的内容与 3 步提示，**不落盘**；
+- `--apply` 才写；若 `design_board.json` 已存在则**拒绝**（绝不覆盖）；
+- 从 `problem_brief.md` 首行推标题、从 `model_selection_audit.json` 的候选推 options（`final_selection` 对应项标 `recommended`，其余 `alternative`）；都没有就生成占位板；
+- 每个 option 的 `source_ref.verified = False` 且带 `unverified_reason`，所以 checker 会给出可读的待办提示，**不会**伪造已核验；
+- **不会**写 `confirmed` / `confirm_code` / `confirmed_at`——用户必须自己重新走一遍确认。
+
+配套：`design_board_checker.py --allow-legacy` 可把"缺板"从 error 降级为 warning（`legacy_workspace_without_board`），用于过渡期不阻塞旧项目；其它失败码严格度不变。
+
+## tools_sync_checker.py
+
+```bash
+python "tools/tools_sync_checker.py" --primary "." --branch "../math-modeling-per-question"
+python "tools/tools_sync_checker.py" --primary "." --branch "../math-modeling-per-question" --mode strict
+```
+
+比对主仓库与按小问分支仓库的 `tools/*.py` 哈希，发现**未声明**的漂移。分类：
+
+| 类别 | 含义 |
+|---|---|
+| `identical` | 哈希相同 |
+| `differs_expected` | 在预期差异白名单里（`doctor.py` / `pipeline_check.py` / `workflow_runner.py`） |
+| `differs_unexpected` | **漂移**，需要处理 |
+| `primary_only` / `branch_only` | 单边存在的文件 |
+
+默认模式只报告（exit 0）；`--mode strict` 下 `differs_unexpected` 非空则 exit 1，适合放进 CI。白名单越短越好——每个条目都是一次"允许两边行为不同"的让步。
+
+## design_board_checker.py
+
+```bash
+python "tools/design_board_checker.py" --workspace "." --mode excellence
+python "tools/design_board_checker.py" --workspace "." --mode excellence --no-cross-audit
+python "tools/design_board_checker.py" --workspace "." --mode excellence --skip-timeline
+python "tools/design_board_checker.py" --workspace "." --mode excellence --allow-legacy
+```
+
+检查 `design_board.json` 的结构、确认状态、`board_sha256` 一致性、`design_rounds/` 轮次完整性与确认来源；并做两类额外校验：
+
+1. **交叉校验（方案 C）**：把板的 `user_choice` 对应 option 名与审计的 `final_selection.name` 对账，并要求板的候选名与 `model_selection_audit.json` 的 `candidates[].name` 至少有一对能匹配（归一化后双向包含）。失败码：`board_audit_missing`、`board_audit_selection_mismatch`、`board_audit_candidate_mismatch`。加 `--no-cross-audit` 可跳过。
+2. **时间线校验**：`solution.py` / `solution_tests.py` / `results/` 下代码与结果文件的 mtime 不得早于 `confirmed_at`（容差 5 秒），防止"先写代码后补板"。失败码 `code_written_before_confirm`。夹具目录（`tests/test_data`、`examples/solved-python`、`examples/design-board-sample`）自动豁免，或加 `--skip-timeline` 跳过。
+
+关键字段：`passed`、`warning`、`confirmed`、`cross_audit`（`checked`/`skipped`/`not_applicable`）、`timeline`（`checked`/`skipped`）、`checks`、`issues`。
+
 ## model_selection_checker.py
 
 ```bash

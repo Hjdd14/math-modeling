@@ -105,11 +105,23 @@ def run_code(file_path: str, lang: str, timeout: int = 300, workdir: str = None)
     else:
         raise ValueError(f"不支持的语言: {lang}")
 
+    # 显式锁定 UTF-8 两端：中文建模脚本几乎必然有中文输出，若父进程按系统编码
+    # （简体 Windows 默认 GBK）解码子进程的 UTF-8 字节，会抛 UnicodeDecodeError
+    # 并被计为"代码运行失败"——闸门于是误判。这里让子进程强制输出 UTF-8，
+    # 父进程也按 UTF-8 解码，且 errors="replace" 保证任何残留字节都不会让读取线程崩。
+    child_env = dict(os.environ)
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    child_env["PYTHONUTF8"] = "1"
+    child_env.setdefault("PYTHONLEGACYWINDOWSSTDIO", "0")
+
     popen_kwargs = {
         "cwd": workdir,
         "stdout": subprocess.PIPE,
         "stderr": subprocess.PIPE,
         "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "env": child_env,
     }
     if os.name != "nt":
         # 独立进程组，使超时能一次性回收整棵进程树。

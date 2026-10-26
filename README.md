@@ -58,6 +58,7 @@
 | 阶段 | 做什么 | 关键产物 |
 |------|--------|----------|
 | **Phase 0** 题目与数据 | 解析题目与附件，建立数据契约与题意审计 | `problem_brief.md`、`ambiguity_register.json`、`assumption_ledger.md`、`data_schema.json` |
+| **Phase 0.5** 设计板循环 | 生成多候选择优方案与真实试算，用户改选/批注/调权重，连续两轮无修改后由用户输入确认码放行 | `design_board.json`、`design_rounds/`、`design_board.md`、`mini_trials.json` |
 | **Phase 1** 并行建模共识 | 5 视角建模 + 题型层面动态专家 + 资料库检索，并行批评与修正，最终裁决 | `baseline_solution.json`、`final_solution.json`、`model_decision.md`、`innovation_register.json` |
 | **Phase 2/3** 写作交接 + 代码 | 写作交接文档 Agent 与代码 Agent 并行，生成契约测试与可运行代码 + 图表 | `writer_prompt.md`、`solution.py`/`solution.m`、`results/validation_summary.json` |
 | **Phase 4** 评审验证 | 语法/逻辑/输出三 Agent 并行，独立复现，多评委并行审查，工具链 gate | `judge_panel_review.json`、`results/figure_quality_report.json` |
@@ -307,6 +308,8 @@ math-modeling/
 │   ├── input_parser.py       # PDF/DOCX/MD/TXT + Excel/CSV 解析
 │   ├── state_manager.py     # 原子状态维护
 │   ├── doctor.py             # 本地依赖与仓库体检
+│   ├── design_board.py      # 设计板 render/ingest/status/confirm
+│   ├── design_board_checker.py  # 决策板校验 + 交叉校验 + 时间线校验
 │   └── ...                   # 详见 references/tools.md
 ├── workflows/                # 宿主 workflow 模板（JS，仅语法检查）
 ├── evals/                    # 本地 eval 与 mini benchmark

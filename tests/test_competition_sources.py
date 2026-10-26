@@ -100,10 +100,25 @@ def test_award_playbook_contains_ten_problem_types_and_forty_sourced_method_card
     cards = re.findall(r"^#### 方法卡\s+.+?(?=^#### 方法卡\s+|^### |\Z)", playbook, flags=re.M | re.S)
     assert len(cards) >= 40
 
-    required_labels = ["来源比赛", "年份", "题号", "适用条件", "误用风险", "推荐验证", "来源链接"]
+    required_labels = [
+        "来源比赛",
+        "年份",
+        "题号",
+        "适用条件",
+        "误用风险",
+        "推荐验证",
+        "来源链接",
+        "推荐理由",
+        "计算复杂度",
+        "实现依赖",
+        "对标 baseline",
+    ]
     for card in cards:
         for label in required_labels:
             assert f"- {label}：" in card or f"- {label}:" in card
+        card_labels = re.findall(r"^- ([^：:\n]+)[：:]", card, flags=re.M)
+        assert len(card_labels) == len(required_labels)
+        assert card_labels[-1] == "来源链接"
 
 
 def test_source_registry_checker_passes_repository_and_rejects_unsourced_method_card(tmp_path):

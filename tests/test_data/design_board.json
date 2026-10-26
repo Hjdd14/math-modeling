@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "board_id": "b-2026-06-28-fixture-green-production",
+  "board_sha256": "14021f458a09fd0b8471cfe7e7407b631da18a812a1710404c71930c0a3406bd",
+  "language": "python",
+  "created_at": "2026-06-28T10:00:00+00:00",
+  "revision": 2,
+  "problem_summary": {
+    "title": "生产计划优化：A/B 产品产量与最大利润",
+    "source": "problem_brief.md（夹具题目）",
+    "questions": [
+      "问题一：在甲、乙车间工时上限内确定 A/B 产量，使总利润最大"
+    ],
+    "key_ambiguities": []
+  },
+  "mindmap": {
+    "format": "mermaid",
+    "source": "graph LR\n  P[生产计划] --> Q1[问题一 A/B 产量]\n  Q1 --> O1[O1 整数规划 ⭐]\n  Q1 --> O2[O2 贪心启发式]\n  O1 --> V[枚举 oracle 验证]\n  O1 --> B[baseline 对比]"
+  },
+  "questions": [
+    {
+      "id": "Q1",
+      "goal": "确定 A、B 产品非负整数产量，在甲车间 80 小时、乙车间 90 小时上限内最大化总利润",
+      "options": [
+        {
+          "id": "O1",
+          "name": "整数规划",
+          "tier": "recommended",
+          "rationale": "约束线性、只有 2 个整数变量，枚举全部可行整点即可证明全局最优",
+          "source_ref": {
+            "type": "method_card",
+            "ref": "OPT-01",
+            "tier": "tier_a",
+            "verified": true,
+            "note": "references/award_playbook.md#方法卡 OPT-01 线性规划基线"
+          },
+          "complexity": "O(可行整点数)；本夹具可行域很小，毫秒级完成",
+          "dependencies": [],
+          "risk": "变量规模增大到上万时枚举不可行，需要换 scipy.optimize.milp；评委可能要求给出 LP 下界",
+          "mini_trial": {
+            "sample": "全量参数（2 个产品、2 个车间约束）",
+            "output": {
+              "objective": 12000,
+              "x_a": 30,
+              "x_b": 20,
+              "feasible": true
+            },
+            "seconds": 0.004,
+            "reproduce_cmd": "python solution.py"
+          }
+        },
+        {
+          "id": "O2",
+          "name": "贪心启发式",
+          "tier": "alternative",
+          "rationale": "实现最简单、可解释性强，适合作为 baseline 对照",
+          "source_ref": {
+            "type": "method_card",
+            "ref": "OPT-02",
+            "tier": "tier_a",
+            "verified": true,
+            "note": "references/award_playbook.md#方法卡 OPT-02 整数规划与启发式修复"
+          },
+          "complexity": "O(n log n)",
+          "dependencies": [],
+          "risk": "只能得到局部最优，无法证明 gap；本夹具会给出低于最优的可行解",
+          "mini_trial": {
+            "sample": "全量参数（贪心路径）",
+            "output": {
+              "objective": 11000,
+              "feasible": true
+            },
+            "seconds": 0.0001,
+            "reproduce_cmd": "python solution.py --method greedy"
+          }
+        }
+      ],
+      "user_choice": "O1",
+      "user_locked": true,
+      "user_comment": "用整数规划，但要求给出 oracle 验证与 gap，方便评委复核最优性。",
+      "confirmed": true
+    }
+  ],
+  "pending_decisions": [],
+  "no_change_rounds": 2,
+  "confirmed": true,
+  "confirmed_at": "2026-06-28T12:00:00+00:00",
+  "confirmed_by": "user",
+  "receipt_origin": "browser-submit",
+  "receipt_nonce": "6b1f4c2d-8e37-4a90-b5c1-2d7f3e9a04c8",
+  "confirm_code": "1402",
+  "confirm_attested": true,
+  "history": [
+    {
+      "round": 1,
+      "at": "2026-06-28T11:30:00+00:00",
+      "board_sha256": "14021f458a09fd0b8471cfe7e7407b631da18a812a1710404c71930c0a3406bd",
+      "user_edited": true,
+      "changes": [
+        {
+          "path": "questions[0].user_choice",
+          "from": "O2",
+          "to": "O1"
+        },
+        {
+          "path": "questions[0].user_comment",
+          "op": "added",
+          "value": "用整数规划，但要求给出 oracle 验证与 gap。"
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "at": "2026-06-28T12:00:00+00:00",
+      "board_sha256": "14021f458a09fd0b8471cfe7e7407b631da18a812a1710404c71930c0a3406bd",
+      "user_edited": false,
+      "changes": []
+    }
+  ]
+}

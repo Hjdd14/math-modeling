@@ -147,6 +147,66 @@
 }
 ```
 
+## design_board.json
+
+唯一真实来源：用户看到过哪些候选方案、选了哪个、改过几轮、有没有确认。`design_board.md` / `design_board.html` / `design_choices.xlsx` 都只是它的渲染视图，改动只在 JSON 一处。
+
+```json
+{
+  "schema_version": 1,
+  "board_id": "b-YYYY-MM-DD-xxxx",
+  "board_sha256": "<由 design_board.py render 计算写入，不要手写>",
+  "language": "python",
+  "created_at": "ISO8601",
+  "revision": 1,
+  "problem_summary": {
+    "title": "...",
+    "questions": ["问题一", "问题二"],
+    "key_ambiguities": [{"id": "A1", "severity": "medium", "issue": "...", "resolution": "pending"}]
+  },
+  "mindmap": {"format": "mermaid", "source": "graph LR\n  P[题目] --> Q1[问题一]"},
+  "questions": [
+    {
+      "id": "Q1",
+      "goal": "...",
+      "options": [
+        {
+          "id": "O1",
+          "name": "候选方案名（必须能与 model_selection_audit.json 的 candidates[].name 匹配）",
+          "tier": "recommended",
+          "rationale": "为什么推荐它",
+          "source_ref": {"type": "method_card", "ref": "OPT-01", "tier": "tier_a", "verified": true},
+          "complexity": "...",
+          "dependencies": [],
+          "risk": "...",
+          "mini_trial": {"sample": "...", "output": {"objective": 0}, "seconds": 0.0, "feasible": true}
+        }
+      ],
+      "user_choice": "O1",
+      "user_locked": true,
+      "user_comment": "",
+      "confirmed": false
+    }
+  ],
+  "pending_decisions": [],
+  "no_change_rounds": 0,
+  "confirmed_at": null,
+  "confirmed_by": null,
+  "receipt_origin": null,
+  "confirm_code": null,
+  "confirm_attested": false
+}
+```
+
+硬规则（checker 逐条校验）：
+
+- 每题至少 2 个 `options`，否则不算"给出过选择"；每个 option 的 `name` 必须能与 `model_selection_audit.json` 的 `candidates[].name` 对上。
+- 每个 option 必须有 `rationale` / `risk` / `source_ref` / `mini_trial`；`source_ref.verified == false` 时必须同时给出 `unverified_reason`，禁止"假装查过"。
+- `user_choice` 必须是某个 option 的 `id`；`user_locked == true` 的选项在下游阶段不得被推翻，要改只能回到决策板再走一轮。
+- `confirmed: true` 时必须有 `confirmed_at` / `confirmed_by` / `receipt_origin` / `confirm_code`（4 位）/ `confirm_attested`（布尔）。
+- `no_change_rounds >= 2` 才允许 `confirmed: true`：至少两轮用户明确表示"不再改"，才算收敛。
+- `board_sha256` 由 `design_board.py render` 回写，与去掉该字段后的内容哈希一致；手写等于自证，checker 会判失败。
+
 ## model_selection_audit.json
 
 ```json
@@ -438,6 +498,9 @@
 
 ## validation_summary.json
 
+> ⚠️ 本示例是**结构参考**，不是可用证据。照抄后必须把每一项换成真实计算值，并把 `status` 改为 `passed`/`failed`。
+> `evidence_checker.py` 与 `robustness_checker.py` 会把仍含 `NOT_VALIDATED` 的 payload 判为失败。
+
 ```json
 {
   "baseline_comparison": {
@@ -445,14 +508,16 @@
     "metric": "objective_or_error",
     "baseline_value": 0,
     "model_value": 0,
-    "passed": true
+    "status": "NOT_VALIDATED",
+    "passed": null
   },
   "oracle_tests": [
     {
       "name": "small_known_case",
       "expected": 0,
       "actual": 0,
-      "passed": true
+      "status": "NOT_VALIDATED",
+      "passed": null
     }
   ],
   "solver_cross_checks": [
@@ -460,18 +525,21 @@
       "name": "alternate_solver_or_enumeration",
       "primary": 0,
       "secondary": 0,
-      "passed": true
+      "status": "NOT_VALIDATED",
+      "passed": null
     }
   ],
   "sensitivity_analysis": {
     "method": "one_at_a_time",
     "max_relative_change": 0,
-    "passed": true
+    "status": "NOT_VALIDATED",
+    "passed": null
   },
   "invariants": [
     {
       "name": "constraints_satisfied",
-      "passed": true
+      "status": "NOT_VALIDATED",
+      "passed": null
     }
   ],
   "failure_modes": [
@@ -482,31 +550,37 @@
   ],
   "constraint_residuals": {
     "max_abs": 0,
-    "passed": true
+    "status": "NOT_VALIDATED",
+    "passed": null
   },
   "optimality_gap": {
     "value": 0,
-    "passed": true
+    "status": "NOT_VALIDATED",
+    "passed": null
   },
   "multi_start": {
     "runs": 5,
     "best_values": [0, 0, 0],
-    "passed": true
+    "status": "NOT_VALIDATED",
+    "passed": null
   },
   "random_seed_stability": {
     "seeds": [1, 2, 3],
     "std": 0,
-    "passed": true
+    "status": "NOT_VALIDATED",
+    "passed": null
   },
   "bootstrap_confidence_interval": {
     "level": 0.95,
     "lower": 0,
     "upper": 0,
-    "passed": true
+    "status": "NOT_VALIDATED",
+    "passed": null
   },
   "perturbation_stability": {
     "ranking_changed": false,
-    "passed": true
+    "status": "NOT_VALIDATED",
+    "passed": null
   }
 }
 ```

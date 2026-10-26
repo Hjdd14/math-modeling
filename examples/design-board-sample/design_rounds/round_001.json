@@ -1,0 +1,23 @@
+{
+  "round": 1,
+  "at": "2026-10-19T21:55:00+08:00",
+  "board_id": "b-2026-10-19-green-production",
+  "board_sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "user_edited": true,
+  "changes": [
+    {
+      "path": "questions[0].user_choice",
+      "from": "O2",
+      "to": "O1",
+      "reason": "用户要求可证明最优 + gap"
+    },
+    {
+      "path": "questions[0].user_comment",
+      "op": "added",
+      "value": "用 O1，但要求给出 LP 松弛下界和 gap"
+    }
+  ],
+  "receipt_origin": "browser-submit",
+  "receipt_nonce": "3c7d9e2a-5f81-4b06-9a2d-7e4c1b8f0a35",
+  "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/141.0"
+}

@@ -19,6 +19,10 @@ REQUIRED_ROLES = {
     "engineering_business_judge": "工程/业务解释评委",
 }
 RESOLVED_STATUSES = {"resolved", "fixed", "closed", "accepted", "done", "通过", "已解决"}
+# 评委打分的最低通过线：低于该分数的评分不能计入"通过"。
+MIN_SCORE = 60
+# chair 决策的合法取值；score: 0 之类"形式上有 decision"的记录必须被拦住。
+VALID_DECISIONS = {"pass", "conditional_pass", "fail", "reject", "needs_revision"}
 
 
 def output(result: dict):
@@ -48,6 +52,7 @@ def _missing_result(root: Path, mode: str) -> dict:
         "path": str(root / "judge_panel_review.json"),
         "passed": severity == "warning",
         "warning": severity == "warning",
+        "min_score": MIN_SCORE,
         "roles_present": 0,
         "checks": [],
         "issues": [
@@ -86,6 +91,7 @@ def check_judge_panel(workspace: str, mode: str = "standard") -> dict:
             "path": str(path),
             "passed": False,
             "warning": False,
+            "min_score": MIN_SCORE,
             "roles_present": 0,
             "checks": [],
             "issues": [{"code": "invalid_json", "severity": "error", "message": str(exc)}],
@@ -105,6 +111,26 @@ def check_judge_panel(workspace: str, mode: str = "standard") -> dict:
     for judge in judges:
         if not isinstance(judge, dict):
             continue
+        # 分数缺失不阻断（部分项目只在 chair_summary 记总分），但一旦给出就必须达标。
+        raw_score = judge.get("score")
+        if raw_score is not None:
+            if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
+                _add_issue(
+                    issues,
+                    "invalid_judge_score",
+                    f"评委 score 必须是数字，当前为 {raw_score!r}。",
+                    judge_type=judge.get("judge_type"),
+                    score=raw_score,
+                )
+            elif raw_score < MIN_SCORE:
+                _add_issue(
+                    issues,
+                    "judge_score_below_threshold",
+                    f"评委打分 {raw_score} 低于最低通过线 {MIN_SCORE}。",
+                    judge_type=judge.get("judge_type"),
+                    score=raw_score,
+                    threshold=MIN_SCORE,
+                )
         for item in judge.get("issues", []) or []:
             if isinstance(item, dict) and _issue_is_unresolved_high(item):
                 _add_issue(
@@ -122,6 +148,18 @@ def check_judge_panel(workspace: str, mode: str = "standard") -> dict:
     checks.append({"name": "chair_summary", "passed": chair_ok})
     if not chair_ok:
         _add_issue(issues, "missing_chair_summary", "缺少 chair_summary.decision 或 required_fixes。")
+    if isinstance(chair, dict):
+        decision = chair.get("decision")
+        # 缺失 decision 已由 chair_ok 拦下，这里只拦"给了但不在合法集合内"的取值。
+        if decision is not None:
+            decision_valid = isinstance(decision, str) and decision in VALID_DECISIONS
+            if not decision_valid:
+                _add_issue(
+                    issues,
+                    "invalid_chair_decision",
+                    f"chair_summary.decision 取值非法: {decision!r}；合法取值: {sorted(VALID_DECISIONS)}。",
+                    decision=decision,
+                )
 
     passed = not any(issue["severity"] == "error" for issue in issues)
     warning = any(issue["severity"] == "warning" for issue in issues)
@@ -131,6 +169,7 @@ def check_judge_panel(workspace: str, mode: str = "standard") -> dict:
         "path": str(path),
         "passed": passed,
         "warning": warning,
+        "min_score": MIN_SCORE,
         "roles_present": len(roles),
         "checks": checks,
         "issues": issues,

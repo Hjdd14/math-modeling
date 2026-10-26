@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "python -c \"import os,runpy; os.environ['MM_HOOK_STYLE']='cursor'; runpy.run_path('hooks/pre_tool_use_guard.py', run_name='__main__')\"",
+        "timeout": 15
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "python -c \"import os,runpy; os.environ['MM_HOOK_STYLE']='cursor'; runpy.run_path('hooks/pre_tool_use_guard.py', run_name='__main__')\"",
+        "timeout": 15
+      }
+    ]
+  }
+}

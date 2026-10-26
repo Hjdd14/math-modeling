@@ -14,6 +14,7 @@ try:
     from tools.code_runner import run_code
     from tools.consistency_checker import check_formula_consistency
     from tools.data_leakage_checker import check_data_leakage
+    from tools.design_board_checker import check_design_board
     from tools.evidence_checker import check_evidence
     from tools.figure_auditor import audit_figures
     from tools.figure_checker import batch_check
@@ -43,6 +44,7 @@ except ImportError:
     from code_runner import run_code
     from consistency_checker import check_formula_consistency
     from data_leakage_checker import check_data_leakage
+    from design_board_checker import check_design_board
     from evidence_checker import check_evidence
     from figure_auditor import audit_figures
     from figure_checker import batch_check
@@ -71,9 +73,18 @@ def output(result: dict):
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 
+# 决策产物硬门清单：最终的模型选择结论与模型决策文档。
+# 这两项不再属于“推荐但可缺”的软清单，缺失时由 _check_decision_artifacts 判定。
+DECISION_ARTIFACTS = ("final_solution.json", "model_decision.md")
+
+# 与其它 checker（case_retrieval_checker / writer_prompt_checker 等）保持一致：
+# standard 之外的严格模式缺证据一律判 error。
+STRICT_MODES = {"strict", "hard", "complete", "full", "excellence"}
+
 # Phase 5 固定产物清单，取自 references/workflow.md 的归档要求。
 # 仅用于生成 artifact_completeness 提示，不参与 passed 判定：
 # standard 模式必须保持对旧工作区的兼容（warning-only）。
+# 注意：final_solution.json 与 model_decision.md 已升为硬门，见 DECISION_ARTIFACTS。
 RECOMMENDED_ARTIFACTS = (
     "ambiguity_register.json",
     "assumption_ledger.md",
@@ -84,6 +95,7 @@ RECOMMENDED_ARTIFACTS = (
     "modeling_memory.md",
     "baseline_solution.json",
     "case_retrieval.json",
+    "design_board.json",
     "model_selection_audit.json",
     "model_spec.json",
     "optimization_certificate.json",
@@ -94,8 +106,6 @@ RECOMMENDED_ARTIFACTS = (
     "solver_strategy.json",
     "ablation_study.json",
     "innovation_register.json",
-    "final_solution.json",
-    "model_decision.md",
     "writer_prompt.md",
     "figure_style.json",
     "figure_storyboard.md",
@@ -133,6 +143,50 @@ def _artifact_completeness(root: Path, language: str, required_missing: list) ->
             "recommended_missing 不影响 passed。standard 模式只做兼容性自检；"
             "完整交付请使用 --evidence-mode strict --quality-mode excellence。"
         ),
+    }
+
+
+def _check_decision_artifacts(root: Path, quality_mode: str) -> dict:
+    """决策产物硬门：final_solution.json 与 model_decision.md 必须存在。
+
+    standard 模式只 warning（保持旧工作区兼容），excellence/strict 家族判 error。
+    """
+    mode = (quality_mode or "standard").lower()
+    strict = mode in STRICT_MODES
+    severity = "error" if strict else "warning"
+    issues: list[dict] = []
+    missing: list[str] = []
+
+    for name in DECISION_ARTIFACTS:
+        if (root / name).exists():
+            continue
+        missing.append(name)
+        if strict:
+            message = f"缺少 {name}；excellence/strict 家族要求决策产物齐备，否则模型选择结论无法复核。"
+        else:
+            message = f"缺少 {name}；standard 模式仅作提示，旧工作区仍可通过。"
+        issues.append(
+            {
+                "code": "missing_decision_artifact",
+                "severity": severity,
+                "message": message,
+                "file": name,
+            }
+        )
+
+    return {
+        "workspace": str(root),
+        "mode": mode,
+        "passed": not any(issue["severity"] == "error" for issue in issues),
+        "warning": any(issue["severity"] == "warning" for issue in issues),
+        "checks": [
+            {
+                "name": "decision_artifacts",
+                "passed": not missing,
+                "missing": missing,
+            }
+        ],
+        "issues": issues,
     }
 
 
@@ -230,6 +284,7 @@ def run_checks(
         _safe("brief_output", checks, lambda: validate_against_brief(str(brief), "output", str(results_dir)))
 
     _safe("evidence_checker", checks, lambda: check_evidence(str(root), evidence_mode))
+    _safe("design_board_checker", checks, lambda: check_design_board(str(root), quality_mode))
     _safe("brief_completeness_checker", checks, lambda: check_brief_completeness(str(root), quality_mode))
     _safe("schema_checker", checks, lambda: check_schema(str(root), quality_mode))
     _safe("model_spec_checker", checks, lambda: check_model_spec(str(root), quality_mode))
@@ -247,6 +302,8 @@ def run_checks(
     _safe("source_freshness_checker", checks, lambda: check_source_freshness(str(Path(__file__).resolve().parents[1]), quality_mode, online=False))
     if online_source_materials:
         _safe("source_material_reader", checks, lambda: check_source_materials(str(Path(__file__).resolve().parents[1]), quality_mode))
+    # 决策产物硬门：与 award_readiness 同属“交付结论可复核”这一组，缺失即失败（strict 家族）。
+    _safe("decision_artifacts", checks, lambda: _check_decision_artifacts(root, quality_mode))
     _safe("award_readiness_checker", checks, lambda: check_award_readiness(str(root), quality_mode))
     _safe("case_retrieval_checker", checks, lambda: check_case_retrieval(str(root), quality_mode))
     _safe("innovation_checker", checks, lambda: check_innovations(str(root), quality_mode))

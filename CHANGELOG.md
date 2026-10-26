@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- 新增 Phase 0.5「设计板循环」闸门：`design_board.json`（每题多候选 + 推荐理由 + 真实试算）、`design_rounds/round_NNN.json`（每轮回执）、`mini_trials.json`（试算证据）与 `design_board.md`（Mermaid 导图 + 对比表 + 4 位确认码）。用户可改选择、写批注、调权重；连续两轮无修改后才可确认。
+- 新增 `tools/design_board.py`（render / ingest / status / confirm，主流程零第三方依赖）与 `tools/design_board_checker.py`。`confirm --apply` 必须由用户本人输入 4 位确认码，AI 不得代跑；`confirm_attested=false` 时 checker 标 warning。
+- 新增三种决策板视图：`render --format md|html|xlsx|all`。HTML 为单文件离线（内联 SVG 思维导图、零外链、深浅色自适应、可打印）；Excel 为 7 工作表（总览 / 待决策 / 权重 / 打分 / 来源 / 批注 / 说明，含下拉、单元格保护、条件格式、加权公式）。缺少对应模块或 `openpyxl` 时只跳过该格式并在 `skipped` 说明，不中断其余格式。
+- 新增从 Excel 回读：`ingest --from design_choices.xlsx` 按表头定位「题号 / 当前选择 / 批注」列转成回执，与 JSON 回执走同一套校验与落盘逻辑。
+- 新增 `design_board.py serve` 本地回传服务器：用户在 HTML 页面上直接选完点提交即写 `design_rounds/`。只监听 `127.0.0.1`，页面注入一次性 token 并在服务端校验 `X-MM-Token`（挡住跨源表单伪造回执）；回执走与 `ingest` 相同的 `apply_submission()` 校验路径；无服务器（file://）时自动降级为下载 `design_board_submission.json`；选择即时存 `localStorage`；`--once` 收到第一份回执即退出。
+- 新增 `tools/mini_trial.py`：跑真实试算并落 `mini_trials.json`（测耗时、解析 stdout JSON、追加写盘、超时用 `Popen` + `taskkill /T` / `killpg` 回收整棵进程树）。
+- 新增 `tools/migrate_workspace.py` 与 `design_board_checker --allow-legacy`：给设计闸门上线前的旧工作区补最小可用 `design_board.json` 骨架（默认 dry-run，从不覆盖、从不伪造确认），或把"缺板"降级为 warning 以渡过过渡期。
+- 新增 `hooks/`：宿主侧 `PreToolUse` 守卫（Claude Code JSON deny / Cursor exit 2），未确认时拦写 `solution.*`；`MM_GATE_BYPASS=1` 可旁路并留 warning。附 `selftest.py`（6 场景）与两种宿主的配置片段。
+- 新增 `tools/tools_sync_checker.py`：比对主仓库与按小问分支仓库的工具哈希，`--mode strict` 下未声明漂移即 exit 1；当前 `differs_unexpected` 为 0。
+- 加固人工确认判据（由对抗演练实测驱动）：`confirm_code` 必须由 `board_sha256` 派生（手写值判 `confirm_code_mismatch`）；`confirmed_by="ci"` 与 `user_non_interactive` 在 standard 仅留痕、**excellence 判 error**；交互式 `confirm` **要求真实终端**，`echo <码> | confirm --apply` 不再能冒充人工确认（非 TTY 直接拒绝，提示改用 `--skip-interactive` 并留痕）。
+- 新增 `docs/DESIGN_GATE_PLAN.md` §20.7 对抗性演练记录：12 个"抄近路"场景的实测结果、3 处加固的前后对比，以及**残余缺口的诚实说明**（完整手写全部确认字段在 skill 内不可证伪，真正强制需装 L5 宿主 hook）。
+- 新增两道反伪造校验：**时间线校验**（代码/结果 mtime 早于 `confirmed_at` 判 `code_written_before_confirm`）与**交叉校验**（板与 `model_selection_audit.json` 的候选必须能对账，判 `board_audit_*`）。
+- 修正 `judge_panel_checker.py`：新增最低分阈值（60）与 `chair_summary.decision` 枚举校验，此前 `score: 0` 也能通过。
+- 修正 `code_runner.py`：给子进程显式注入 `PYTHONIOENCODING=utf-8`/`PYTHONUTF8=1` 并按 `encoding="utf-8", errors="replace"` 解码，此前环境里设了 `PYTHONIOENCODING=utf-8` 时中文输出会触发 `UnicodeDecodeError`，让 `code_runner` 误判失败、excellence 无故变红。
+- 修正 `pipeline_check.py`：`final_solution.json` / `model_decision.md` 从软推荐升为硬门（`missing_decision_artifact`，standard 只 warning），此前删掉它们 excellence 仍能全绿。
+- 扩充 `references/award_playbook.md` 与 `source_registry_checker.py`：40 张方法卡从 7 个必填标签扩到 11 个（追加「推荐理由 / 计算复杂度 / 实现依赖 / 对标 baseline」），两处锁定同步。
+- 修正 `references/templates.md` 的 `validation_summary.json` 示例：全部 `passed: true` 改为 `status: "NOT_VALIDATED"` + `passed: null`，照抄模板不再能通过 `evidence_checker` / `robustness_checker`。
+- 修正 `examples/solved-python` 的两处数值矛盾：`optimization_certificate.json` 的 `bounds` 由 2050 改为真实最优值 2175，审计的 `oracle_value` 同步；`model_selection_audit.json` 的候选名与决策板对齐。
+
 - 新增 `award_readiness_checker.py` 并接入 excellence pipeline，用于硬审计 `ambiguity_register.json`、`assumption_ledger.md`、`scoring_strategy.md`、`ablation_study.json`、`decision_insights.md` 和 `defense_questions.md`，防止高风险歧义、评分策略、消融证据、决策解释或评委质询准备缺失时仍被放行。
 - 新增奖项级 excellence gate：`brief_completeness_checker.py`、`model_selection_checker.py`、`optimization_certificate_checker.py`、`uncertainty_budget_checker.py`、`validation_profile_checker.py`、`data_leakage_checker.py`、`statistical_validation_checker.py`、`source_freshness_checker.py` 和 `mini_benchmark_runner.py`，并接入 `pipeline_check.py --quality-mode excellence`、CI 与 release checklist。
 - 强化图表、合规和复现：`figure_storyboard.md` 每图必须含 `file`、`claim`、`source_data`、`x_unit`、`y_unit`、`supports_question`；`writer_prompt.md` 必须交接每图结论和提交复核清单；`compliance_record.json` 检查匿名、AI 披露、引用、页数、附件、代码提交和官方规则；`reproducibility_manifest.json` 增加 OS、求解器、随机库、耗时和输入/输出 hash。

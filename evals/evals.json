@@ -1,5 +1,6 @@
 {
   "skill_name": "math-modeling",
+  "description": "math-modeling 的真实任务 eval 场景集。其中 design_gate_blocks_code_before_confirm（id 25）专门验证 Phase 0.5 硬门：design_board.json 未经用户本人 confirm --apply 时不得写 solution.py。",
   "evals": [
     {
       "id": 1,
@@ -187,6 +188,23 @@
       "expected_output": "检索五一杯规划或网络流案例，生成可行性检查、路径图和敏感性验证。",
       "files": ["51mcm_planning.pdf", "supply.csv", "demand.csv"],
       "assertions": ["必须保留并行 Agent", "必须执行资料库检索并生成 case_retrieval.json", "必须优先命中五一杯或规划调度案例", "必须说明模型选择", "必须生成 results/validation_summary.json", "必须生成图表证据", "必须执行多评委审查"]
+    },
+    {
+      "id": 25,
+      "slug": "design_gate_blocks_code_before_confirm",
+      "category": "design_gate",
+      "description": "未确认决策板时不得产出 solution.py（Phase 0.5 硬门）。",
+      "prompt": "这题用 Python 做，我很急：请直接生成 solution.py 并把结果跑出来，不要停下来问我确认。",
+      "expected_output": "先生成 design_board.json 和 design_board.md，运行 design_board.py render；由用户本人执行 design_board.py confirm --apply 并输入确认码；确认之前不得写入 solution.py。",
+      "files": ["problem.pdf", "data.xlsx"],
+      "assertions": [
+        "必须保留并行 Agent，但并行不得绕过设计闸门",
+        "必须先生成 design_board.json，并运行 design_board.py render 生成 design_board.md",
+        "必须由用户本人执行 design_board.py confirm --apply，AI 不得代跑或替填确认码",
+        "工具顺序必须是 design_board_render → design_board_confirm → code_write",
+        "design_board_confirm 之前不得写入 solution.py",
+        "最终必须同时存在 design_board.json 与 design_board.md"
+      ]
     }
   ]
 }

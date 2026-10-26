@@ -55,7 +55,135 @@
 - 哪些地方适合突出模型创新。
 - 哪些要求属于格式、精度、匿名性、AI 使用披露或解释性扣分点。
 
+## Phase 0.5: 设计板循环（用户确认闸门）
+
+Phase 0 完成后进入本阶段。目标是让用户在写任何代码之前看到完整的建模决策、候选算法对比与真实试算数值，并由用户本人确认放行。Phase 0.5 是硬性闸门：`design_board.json` 未 `confirmed: true` 之前，不允许进入 Phase 1，也不允许创建或修改 `solution.py` / `solution.m`。
+
+### 0.5.1 三条硬性规则
+
+1. **AI 只写提议**：`design_board.json` 的 `questions` / `options` / `pending_decisions` 由 AI 生成，这是"提议"。
+2. **用户通道写回执**：`design_rounds/round_NNN.json` 只能由用户提交后经 `ingest` 回写产生；AI 不得代写回执，也不得手写 `no_change_rounds`。
+3. **只有 `confirm` 能写确认**：`confirmed` / `confirmed_at` / `confirmed_by` / `confirm_code` / `confirm_attested` 只能由 `design_board.py confirm --apply` 写入，且必须由**用户本人**执行并输入确认码。
+
+`board_sha256` 由 `render` 计算并回写，同样不允许手写——它是"用户实际看到的这一版内容"的锚点。`.md` / `.html` / `.xlsx` 都只是视图，唯一真实来源是 `design_board.json`。
+
+### 0.5.2 design_board.json
+
+```json
+{
+  "schema_version": 1, "board_id": "b-YYYY-MM-DD-xxxx", "board_sha256": "...",
+  "language": "python", "created_at": "ISO8601", "revision": 1,
+  "problem_summary": {"title": "...", "questions": ["..."], "key_ambiguities": [{"id": "A1", "severity": "medium", "issue": "...", "resolution": "pending"}]},
+  "mindmap": {"format": "mermaid", "source": "graph LR ..."},
+  "questions": [{"id": "Q1", "goal": "...", "options": [{"id": "O1", "name": "...", "tier": "recommended", "rationale": "...", "source_ref": {"type": "method_card", "ref": "OPT-01", "tier": "tier_a", "verified": true}, "complexity": "...", "dependencies": [], "risk": "...", "mini_trial": {"sample": "...", "output": {...}, "seconds": 0.0, "feasible": true}}], "user_choice": "O1", "user_locked": true, "user_comment": "", "confirmed": false}],
+  "pending_decisions": [], "no_change_rounds": 0,
+  "confirmed_at": null, "confirmed_by": null, "receipt_origin": null,
+  "confirm_code": null, "confirm_attested": false
+}
+```
+
+字段要求（`design_board_checker.py` 逐条校验，不要自创字段）：每题至少 2 个 `options`，每个 option 必须带 `rationale`、`source_ref`（含 `tier` 与 `verified`）、`complexity`、`dependencies`、`risk`、`mini_trial`；`source_ref.verified` 为 `false` 时必须补 `unverified_reason`（不允许"假装查过"）；`user_choice` 必须是该题某个 option 的 `id`，用户锁定后置 `user_locked: true` 并写 `user_comment`；`confirmed: true` 时 `confirmed_at` / `confirmed_by` / `receipt_origin` / `confirm_code` / `confirm_attested` 必须齐全。
+
+### 0.5.3 design_rounds/round_NNN.json
+
+每轮回执，`ingest` 自动生成，轮次号递增：
+
+```json
+{"round": 2, "at": "ISO8601", "board_sha256": "...", "user_edited": false,
+ "changes": [{"path": "questions[0].user_choice", "from": "O2", "to": "O1"}],
+ "receipt_origin": "browser-submit", "nonce": "..."}
+```
+
+`user_edited` 与 `changes` 是判断"用户到底改没改"的客观依据，`ingest` 据此自动维护 `no_change_rounds`（未修改则 +1，修改则清零）。
+
+### 0.5.4 mini_trials.json
+
+每个候选算法的真实试算证据，不是口头声明：
+
+```json
+{"trials": [{"question_id": "Q1", "option_id": "O1", "sample_rows": 20, "input_hash": "sha256:...",
+             "output": {"objective": 1240.5, "feasible": true}, "seconds": 0.8,
+             "solver": "HiGHS via scipy.optimize.milp",
+             "reproduce_cmd": "python solution.py --method enum"}]}
+```
+
+数值必须是真实跑出来的，`reproduce_cmd` 必须可复跑。
+
+### 0.5.5 收敛判据（5 条，全部满足才允许确认）
+
+1. 存在 `design_rounds/round_NNN.json`，且最后一轮 `user_edited == false`。
+2. `no_change_rounds >= 2`（连续两轮用户未修改）。
+3. `board_sha256` 与当前 `design_board.json` 内容一致。
+4. 每题 `user_choice` 非空，且 `pending_decisions == []`。
+5. `confirm --apply` 时输入的 4 位确认码与 `render` 写入视图的确认码一致。
+
+### 0.5.6 design_board.py 子命令
+
+```bash
+python "tools/design_board.py" render --workspace "." --format all
+python "tools/design_board.py" ingest --workspace "." --from "user_submission.json"
+python "tools/design_board.py" ingest --workspace "." --from "design_choices.xlsx"
+python "tools/design_board.py" serve --workspace "."
+python "tools/design_board.py" status --workspace "."
+python "tools/design_board.py" confirm --workspace "."
+python "tools/design_board.py" confirm --workspace "." --apply
+```
+
+- `render`：读 JSON 生成视图（`--format md|html|xlsx|all`），同时计算 `board_sha256` 与 4 位确认码并写回 JSON 与三份视图。`html` 为单文件零外链（内联 SVG 导图），`xlsx` 为七工作表（下拉 + 保护 + 条件格式）。缺模块或缺 `openpyxl` 时只跳过该格式，不打断其它格式。
+- `ingest`：读用户提交的 JSON **或 `design_choices.xlsx`**，校验后写 `design_rounds/round_NNN.json`，自动维护 `no_change_rounds`；非法选择或哈希不符即 exit 1。
+- `serve`：起本地回传服务器，用户在页面上直接选完提交即写回执。只绑 `127.0.0.1`，页面注入一次性 token 并在服务端校验 `X-MM-Token`（挡跨源表单伪造）；回执走与 `ingest` 同一套 `apply_submission()` 校验。页面在无服务器（file://）时自动降级为下载 `design_board_submission.json`。`--once` 收到第一份回执即退出。
+- `status`：输出当前轮次、收敛进度、待决项与 `ready_to_confirm`。
+- `confirm`：默认 dry-run，只打印收敛判据是否满足，**不写任何字段**；加 `--apply` 才写确认，并要求交互式输入确认码。
+- `--skip-interactive` 是逃生口：写入 `confirmed_by: "user_non_interactive"`，checker 标 `confirm_not_attested`（warning，留痕不阻断）。
+- CI 场景可设环境变量 `MM_CONFIRM_CODE`；此时 `confirmed_by: "ci"`，checker 标 `confirm_ci`（info）。
+
+### 0.5.7 确认码机制
+
+`render` 从 `board_sha256` 派生 4 位确认码（取前 4 位大写，如 `A7F2`），并写进 `design_board.md`、`design_board.html`、`design_choices.xlsx` 与 dry-run 输出。用户本人在视图上看到这 4 位后运行 `confirm --apply` 输入；AI 若未转述则无法猜中。**AI 不得代用户执行 `confirm --apply`，也不得代填确认码。**
+
+### 0.5.8 写权限归属
+
+| 字段 / 产物 | 允许的写入者 | AI 能否代写 | 理由 |
+|---|---|---|---|
+| `design_board.json` 的 `questions` / `options` / `pending_decisions` | AI | ✅ 应该 | 这是"提议"，AI 的职责就是提方案 |
+| `board_sha256` | `design_board.py render` | ❌ 不应 | 内容快照的锚，手写等于自证 |
+| `design_rounds/*.json` | 用户通道（`ingest` / serve `/submit` / Excel） | ❌ 不应 | 这是"人的输入"，AI 代写等于自问自答 |
+| `no_change_rounds` | `ingest` 自动维护 | ❌ 不应 | 收敛计数器，手写 `2` 可骗过判据 |
+| `confirmed` / `confirmed_at` / `confirmed_by` / `confirm_code` / `confirm_attested` | **`confirm --apply`，且需用户本人触发** | ❌ 绝对不应 | 这是闸门本身 |
+
+一句话原则：`model_decision.md` 是 AI 的内部共识，`design_rounds/` 是人的外部回执；两者混用，闸门立刻失效。
+
+### 0.5.9 时间线校验（防"先写代码、后补板"）
+
+`design_board_checker.py` 校验 `solution.py`、`solution_tests.py` 与 `results/` 下代码和结果文件的 mtime **不得早于** `confirmed_at`（容差 5 秒），否则报 `code_written_before_confirm`（error）。若确认后确实需要一次小修，可在 `design_rounds/` 追加一条 `post_confirm_edit` 记录（说明改了什么、为何不属于方案变更），checker 见到即放行并标 warning。局限：mtime 可被 `os.utime` 伪造，这不是绝对防线，但与 `board_sha256` 绑定叠加后伪造成本显著上升。夹具目录（`tests/test_data`、`examples/solved-python`、`examples/design-board-sample`）自动豁免，或加 `--skip-timeline` 跳过。
+
+### 0.5.10 交叉校验（板与模型选择审计对账）
+
+`design_board_checker.py` 还要把 `design_board.json` 与 `model_selection_audit.json` 对账：
+
+1. `user_choice` 对应 option 的 `name` 必须能匹配审计的 `final_selection.name`，否则 `board_audit_selection_mismatch`。
+2. 板里候选名集合与审计的 `candidates[].name` 集合至少有一对能匹配，否则 `board_audit_candidate_mismatch`。
+3. 已确认但缺 `model_selection_audit.json`：`excellence` 报 `board_audit_missing`（error），`standard` 报 warning。
+
+匹配采用归一化后的**双向包含**比对（去括号内容、小写、去空格与连字符），避免"整数线性规划 (ILP)"与"整数规划"被误判不一致；无法匹配时不猜，直接报失败码并列出双方名称。旧工作区迁移期可加 `--no-cross-audit` 跳过这三条规则（输出标 `cross_audit: skipped`）。
+
+### 0.5.11 旧工作区迁移（`--allow-legacy` 与迁移脚本）
+
+设计闸门上线前就存在的项目没有 `design_board.json`，直接升级会让 excellence 变红。两条过渡路径：
+
+1. `python "tools/migrate_workspace.py" --workspace "."`（dry-run）→ 看将生成的骨架 → `--apply` 落地。生成的板从 `problem_brief.md` / `model_selection_audit.json` 推断题目与候选，所有 `source_ref.verified = false` 并带 `unverified_reason`，**不会**伪造确认状态，用户必须自己重新走 render → confirm。
+2. `python "tools/design_board_checker.py" --workspace "." --allow-legacy`：把"缺板"从 error 降为 warning（`legacy_workspace_without_board`），用于过渡期不阻塞其它检查；其它失败码严格度不变。
+
+### 0.5.12 宿主 hook（L5 防线，可选）
+
+前三层（产物结构 / 哈希与确认码 / 时间线）都在 skill 内部，第 4–5 层需要宿主配合：
+
+- `hooks/pre_tool_use_guard.py`：在宿主调用写文件工具时拦截，若目标是被保护的 `solution.*` / `solution_tests.*` 而所在工作区还没有已确认的 `design_board.json`，则拒绝。支持 Claude Code（JSON `deny`）与 Cursor（exit 2）两种协议；`MM_GATE_BYPASS=1` 可旁路并留 warning。
+- 安装方式见 `hooks/README.md`。**它拦不住**用 shell 重定向写文件、用户自己手写、或宿主不支持 hook——所以它是"提高伪造成本 + 留痕"，不是"证明人确认过"。
+
 ## Phase 1: 并行建模共识
+
+Phase 1 的输入除 `problem_brief.md` 与题意审计产物外，还必须包含 Phase 0.5 产出的 `design_board.json`：五个建模 Agent 的 prompt 中必须注入其中 `user_locked: true` 的用户选择，不得推翻；若要推翻，必须回到 Phase 0.5 重新走一轮。
 
 Phase 1 必须使用五视角建模 Agent。必须先生成 `problem_taxonomy`，再由资料库检索 Agent 读取 `references/competition_sources.json` 和 `references/award_playbook.md`，输出 `case_retrieval.json`，列出相似题型、可借鉴模型、推荐验证和不能照搬的风险。五个 Agent 并行生成方案时必须参考 `case_retrieval.json`，但不得直接套用不匹配模型。按题型最多追加 3 个动态专家 Agent，随后并行批评、并行修正，再由创新筛选 Agent 和最终裁决 Agent 选定方案。本阶段输出 `baseline_solution.json`、`case_retrieval.json`、`model_selection_audit.json`、`model_spec.json`、`solver_strategy.json`、`optimization_certificate.json`、`uncertainty_budget.json`、`validation_profile.json`、`ablation_study.json`、`innovation_register.json`、`final_solution.json` 与 `model_decision.md`，不生成正式写作正文。
 

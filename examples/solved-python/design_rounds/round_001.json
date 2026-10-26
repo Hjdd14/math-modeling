@@ -1,0 +1,21 @@
+{
+  "round": 1,
+  "at": "2026-06-28T11:00:00+00:00",
+  "board_id": "b-2026-06-28-solved-python-green-production",
+  "board_sha256": "be7f9fa870e335ec14f030960bf80839d1944af0f9f8f0a6e8996082ba5fe330",
+  "user_edited": true,
+  "changes": [
+    {
+      "path": "questions[0].user_choice",
+      "from": "O2",
+      "to": "O1"
+    },
+    {
+      "path": "questions[0].user_comment",
+      "op": "added",
+      "value": "要求给出 LP 松弛下界和 gap。"
+    }
+  ],
+  "receipt_origin": "browser-submit",
+  "receipt_nonce": "nonce-1"
+}

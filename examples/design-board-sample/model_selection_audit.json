@@ -1,0 +1,33 @@
+{
+  "candidates": [
+    {
+      "name": "整数线性规划（枚举）",
+      "score": 0.93,
+      "rejection_reason": "",
+      "evidence": ["small_scale_oracle", "constraint_residuals"]
+    },
+    {
+      "name": "贪心 + 爬山局部搜索",
+      "score": 0.72,
+      "rejection_reason": "陷入局部最优（本例 2120，比最优低 2.53%），无法给出 gap 证明，评委会追问。",
+      "evidence": ["baseline_comparison"]
+    },
+    {
+      "name": "随机采样 100 个可行解",
+      "score": 0.61,
+      "rejection_reason": "结果随随机种子变化，无最优性保证，无法回答『为什么是这个解』。",
+      "evidence": ["baseline_comparison"]
+    },
+    {
+      "name": "连续松弛后取整",
+      "score": 0.74,
+      "rejection_reason": "取整后可能破坏材料和碳排约束，需额外修复；且本例松弛解恰为整数，方法无增益。",
+      "evidence": ["baseline_comparison"]
+    }
+  ],
+  "final_selection": {
+    "name": "整数线性规划（枚举）",
+    "score": 0.93,
+    "evidence": ["optimality_gap=0", "oracle_value=2175"]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "round": 2,
+  "at": "2026-06-28T12:00:00+00:00",
+  "board_id": "b-2026-06-28-fixture-green-production",
+  "board_sha256": "14021f458a09fd0b8471cfe7e7407b631da18a812a1710404c71930c0a3406bd",
+  "user_edited": false,
+  "changes": [],
+  "receipt_origin": "browser-submit",
+  "receipt_nonce": "nonce-2"
+}

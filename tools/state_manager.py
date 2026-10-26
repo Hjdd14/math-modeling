@@ -17,6 +17,7 @@ LOCK_TIMEOUT_SECONDS = 10
 LOCK_STALE_SECONDS = 60
 ARTIFACT_FILES = {
     "problem_brief": "problem_brief.md",
+    "design_board": "design_board.json",
     "modeling_memory": "modeling_memory.md",
     "final_solution": "final_solution.json",
     "model_decision": "model_decision.md",

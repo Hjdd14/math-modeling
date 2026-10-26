@@ -21,7 +21,19 @@ REQUIRED_SOURCE_FIELDS = {
     "case_material_type",
     "trust_notes",
 }
-REQUIRED_CARD_LABELS = ["来源比赛", "年份", "题号", "适用条件", "误用风险", "推荐验证", "来源链接"]
+REQUIRED_CARD_LABELS = [
+    "来源比赛",
+    "年份",
+    "题号",
+    "适用条件",
+    "误用风险",
+    "推荐验证",
+    "来源链接",
+    "推荐理由",
+    "计算复杂度",
+    "实现依赖",
+    "对标 baseline",
+]
 REQUIRED_PROBLEM_TYPES = [
     "优化调度",
     "预测统计",

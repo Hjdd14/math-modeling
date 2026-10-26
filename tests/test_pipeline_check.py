@@ -5,8 +5,9 @@
 import os
 import json
 import shutil
+from datetime import datetime
 
-from tools import pipeline_check
+from tools import design_board, pipeline_check
 
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -198,6 +199,51 @@ def write_quality_artifacts(workspace):
     }
     for name, payload in artifacts.items():
         (workspace / name).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    # final_solution.json 自 P0 任务 5 起是决策产物硬门（`_check_decision_artifacts`），
+    # 结构对齐 tests/test_data/final_solution.json；模型名与上面的
+    # model_selection_audit.json 候选（整数规划 / 贪心启发式）保持一致。
+    (workspace / "final_solution.json").write_text(
+        json.dumps(
+            {
+                "selected_model": "整数规划",
+                "problem_taxonomy": {"primary_types": ["优化"], "secondary_types": ["整数规划"]},
+                "score_matrix": [
+                    {
+                        "model_name": "整数规划",
+                        "problem_fit": 92,
+                        "interpretability": 88,
+                        "computability": 90,
+                        "data_requirement": 80,
+                        "robustness": 82,
+                        "validation_difficulty": 30,
+                        "paper_presentation": 86,
+                        "decision": "selected",
+                    },
+                    {
+                        "model_name": "贪心启发式",
+                        "problem_fit": 70,
+                        "interpretability": 85,
+                        "computability": 95,
+                        "data_requirement": 70,
+                        "robustness": 60,
+                        "validation_difficulty": 40,
+                        "paper_presentation": 72,
+                        "decision": "rejected",
+                    },
+                ],
+                "validation_plan": {
+                    "baseline_comparison": "贪心启发式 baseline",
+                    "oracle_tests": "小规模枚举 oracle",
+                    "solver_cross_checks": "枚举与贪心交叉验证",
+                    "sensitivity_analysis": "profit ± 5%",
+                    "invariants": ["产量非负", "产能约束"],
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     (workspace / "solution_tests.py").write_text(
         "def test_placeholder():\n    assert True\n",
         encoding="utf-8",
@@ -392,6 +438,143 @@ def write_quality_artifacts(workspace):
         ),
         encoding="utf-8",
     )
+    write_design_board(workspace)
+
+
+def write_design_board(workspace):
+    """写 Phase 0.5 决策板夹具。
+
+    `board_sha256` 必须用权威实现（`design_board.compute_board_sha256`）动态计算：
+    写死哈希会在 `design_board_checker` 处撞 `board_hash_mismatch`。
+    候选名必须与上面的 `model_selection_audit.json` 对得上（`整数规划` / `贪心启发式`），
+    否则 `board_audit_candidate_mismatch` 会让 excellence 判定失败。
+    """
+    board = {
+        "schema_version": 1,
+        "board_id": "b-2026-06-28-quality-fixture",
+        "board_sha256": "",
+        "language": "python",
+        "created_at": "2026-06-28T10:00:00+00:00",
+        "revision": 2,
+        "problem_summary": {
+            "title": "单变量产量最大化（pipeline excellence 夹具）",
+            "questions": ["问题一：在产能上限内确定产量 x，使利润最大"],
+            "key_ambiguities": [
+                {
+                    "id": "A1",
+                    "severity": "low",
+                    "issue": "产量是否必须为整数",
+                    "resolution": "resolved",
+                }
+            ],
+        },
+        "mindmap": {"format": "mermaid", "source": "graph LR\n  P[产量最大化] --> Q1[问题一]"},
+        "questions": [
+            {
+                "id": "Q1",
+                "goal": "确定产量 x 使利润 10*x 最大，且 x <= 100",
+                "options": [
+                    {
+                        "id": "O1",
+                        "name": "整数规划",
+                        "tier": "recommended",
+                        "rationale": "可行域仅 101 个整点，枚举即可证明全局最优",
+                        "source_ref": {
+                            "type": "method_card",
+                            "ref": "OPT-01",
+                            "tier": "tier_a",
+                            "verified": True,
+                        },
+                        "complexity": "O(101)",
+                        "dependencies": [],
+                        "risk": "规模增大需改用求解器",
+                        "mini_trial": {
+                            "sample": "全量可行域 101 个整点",
+                            "output": {"objective": 1000},
+                            "seconds": 0.001,
+                            "feasible": True,
+                        },
+                    },
+                    {
+                        "id": "O2",
+                        "name": "贪心启发式",
+                        "tier": "alternative",
+                        "rationale": "实现最简单，可作 baseline 对比",
+                        "source_ref": {
+                            "type": "method_card",
+                            "ref": "OPT-02",
+                            "tier": "tier_a",
+                            "verified": True,
+                        },
+                        "complexity": "O(1)",
+                        "dependencies": [],
+                        "risk": "无最优性保证，无法给出 gap",
+                        "mini_trial": {
+                            "sample": "贪心路径",
+                            "output": {"objective": 1000},
+                            "seconds": 0.0001,
+                            "feasible": True,
+                        },
+                    },
+                ],
+                "user_choice": "O1",
+                "user_locked": True,
+                "user_comment": "用整数规划，并给出 LP 下界与 gap",
+                "confirmed": True,
+            }
+        ],
+        "pending_decisions": [],
+        "no_change_rounds": 2,
+        "confirmed_at": "2026-06-28T12:00:00+00:00",
+        "confirmed_by": "user",
+        "receipt_origin": "browser-submit",
+        "confirm_code": "",
+        "confirm_attested": True,
+    }
+    board["board_sha256"] = design_board.compute_board_sha256(board)
+    board["confirm_code"] = design_board.derive_confirm_code(board["board_sha256"])
+    (workspace / "design_board.json").write_text(
+        json.dumps(board, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    rounds_dir = workspace / "design_rounds"
+    rounds_dir.mkdir(exist_ok=True)
+    for round_no in (1, 2):
+        (rounds_dir / f"round_{round_no:03d}.json").write_text(
+            json.dumps(
+                {
+                    "round": round_no,
+                    "at": "2026-06-28T11:00:00+00:00",
+                    "board_id": board["board_id"],
+                    "board_sha256": board["board_sha256"],
+                    "user_edited": False,
+                    "changes": [],
+                    "receipt_origin": "browser-submit",
+                    "receipt_nonce": f"fixture-{round_no}",
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    # 时间线校验要求代码/结果文件的 mtime 不早于 confirmed_at。
+    # `copy_workspace` 用 `shutil.copy2`，会保留 `tests/test_data` 里的旧 mtime；
+    # 而 tmp_path 不命中 `FIXTURE_MARKERS`（路径不含 tests/test_data），时间线会真的执行。
+    # 因此这里显式把 mtime 归一到 confirmed_at 之后，避免误报 code_written_before_confirm。
+    confirmed_ts = datetime.fromisoformat(board["confirmed_at"]).timestamp()
+    stale_targets = ["solution.py", "solution_tests.py"]
+    results_dir = workspace / "results"
+    if results_dir.is_dir():
+        stale_targets += [
+            str(path.relative_to(workspace)) for path in results_dir.rglob("*") if path.is_file()
+        ]
+    for rel in stale_targets:
+        target = workspace / rel
+        if target.exists():
+            os.utime(target, (confirmed_ts + 60, confirmed_ts + 60))
+
+
 def test_pipeline_check_strict_evidence_fails_when_summary_missing(tmp_path):
     workspace = copy_workspace(tmp_path)
     (workspace / "results" / "validation_summary.json").unlink()
@@ -470,6 +653,7 @@ def test_pipeline_check_excellence_quality_passes_with_full_artifacts(tmp_path):
         "figure_auditor",
         "manifest_checker",
         "source_freshness_checker",
+        "decision_artifacts",
         "award_readiness_checker",
         "innovation_checker",
         "judge_panel_checker",
@@ -613,3 +797,90 @@ def test_pipeline_check_fails_when_results_are_missing(tmp_path):
     assert result["passed"] is False
     assert result["checks"]["required_files"]["passed"] is False
     assert "results" in "\n".join(result["checks"]["required_files"]["missing"])
+
+
+def test_decision_artifacts_are_hard_gate_not_recommended(tmp_path):
+    """决策产物已从软清单升为硬门，不应再出现在 RECOMMENDED_ARTIFACTS 里。"""
+    assert pipeline_check.DECISION_ARTIFACTS == ("final_solution.json", "model_decision.md")
+    for name in pipeline_check.DECISION_ARTIFACTS:
+        assert name not in pipeline_check.RECOMMENDED_ARTIFACTS
+
+
+def test_pipeline_check_excellence_requires_final_solution_artifact(tmp_path):
+    workspace = copy_workspace(tmp_path)
+    write_quality_artifacts(workspace)
+    (workspace / "final_solution.json").unlink()
+
+    result = pipeline_check.run_checks(
+        str(workspace),
+        "python",
+        evidence_mode="strict",
+        quality_mode="excellence",
+    )
+
+    assert result["passed"] is False
+    assert result["checks"]["decision_artifacts"]["passed"] is False
+    assert {issue["code"] for issue in result["checks"]["decision_artifacts"]["issues"]} == {
+        "missing_decision_artifact"
+    }
+    assert {issue["file"] for issue in result["checks"]["decision_artifacts"]["issues"]} == {
+        "final_solution.json"
+    }
+
+
+def test_pipeline_check_excellence_requires_model_decision_artifact(tmp_path):
+    workspace = copy_workspace(tmp_path)
+    write_quality_artifacts(workspace)
+    (workspace / "model_decision.md").unlink()
+
+    result = pipeline_check.run_checks(
+        str(workspace),
+        "python",
+        evidence_mode="strict",
+        quality_mode="excellence",
+    )
+
+    assert result["passed"] is False
+    assert result["checks"]["decision_artifacts"]["passed"] is False
+    assert {issue["code"] for issue in result["checks"]["decision_artifacts"]["issues"]} == {
+        "missing_decision_artifact"
+    }
+    assert {issue["file"] for issue in result["checks"]["decision_artifacts"]["issues"]} == {
+        "model_decision.md"
+    }
+
+
+def test_pipeline_check_standard_quality_warns_when_decision_artifacts_missing(tmp_path):
+    """standard 模式保持旧工作区兼容：缺决策产物只 warning，不影响 passed。"""
+    workspace = copy_workspace(tmp_path)
+    (workspace / "model_decision.md").unlink()  # final_solution.json 本就不在夹具里
+
+    result = pipeline_check.run_checks(str(workspace), "python", quality_mode="standard")
+
+    assert result["passed"] is True
+    decision = result["checks"]["decision_artifacts"]
+    assert decision["passed"] is True
+    assert decision["warning"] is True
+    assert {issue["severity"] for issue in decision["issues"]} == {"warning"}
+    assert {issue["file"] for issue in decision["issues"]} == {
+        "final_solution.json",
+        "model_decision.md",
+    }
+
+
+def test_pipeline_check_decision_artifacts_pass_when_present(tmp_path):
+    workspace = copy_workspace(tmp_path)
+    write_quality_artifacts(workspace)
+
+    result = pipeline_check.run_checks(
+        str(workspace),
+        "python",
+        evidence_mode="strict",
+        quality_mode="excellence",
+    )
+
+    decision = result["checks"]["decision_artifacts"]
+    assert decision["passed"] is True
+    assert decision["warning"] is False
+    assert decision["issues"] == []
+    assert decision["checks"] == [{"name": "decision_artifacts", "passed": True, "missing": []}]
