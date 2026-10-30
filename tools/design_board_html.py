@@ -129,6 +129,111 @@ NAV_LINKS: tuple[tuple[str, str], ...] = (
 )
 
 
+#: 闸门标识 → 页面文案。页头必须醒目写出"这是 A 闸门 / B 闸门"，避免两板的
+#: 确认码与回执目录被混用（契约 §10 风险表："渲染页显著标注 A/B"）。
+GATE_LABELS: dict[str, str] = {"a": "A 闸门", "b": "B 闸门"}
+GATE_SUBTITLES: dict[str, str] = {
+    "a": "框架与探索边界 · 不锁定模型选型",
+    "b": "方案择定 · 建议不是评委结论",
+}
+GATE_EYEBROWS: dict[str, str] = {
+    "a": "Math Modeling · Phase 0.5 · Design Gate A",
+    "b": "Math Modeling · Phase 1.5 · Design Gate B",
+}
+GATE_LEADS: dict[str, str] = {
+    "a": "这是 AI 在写任何代码之前提交的题意框架：题目读对了吗、高严重度假设接受吗、"
+    "要探索哪些范式（paradigm_set）。本板不锁定模型选型——具体用哪个模型由 B 闸门择定。",
+    "b": "这是 AI 在选定模型之前提交的选型建议：每个候选的分数、维度分、优缺点、"
+    "为什么不建议，以及工具实跑的多组数据对比。选定权在你；本页不是评委审查（评委在 Phase 4）。",
+}
+
+#: 按闸门组织的导航锚点（与各 section 的 id 一一对应）。
+NAV_LINKS_GATE_A: tuple[tuple[str, str], ...] = (
+    ("overview", "速览"),
+    ("map", "导图"),
+    ("paradigm", "范式集合"),
+    ("options", "候选项"),
+    ("compare", "对比表"),
+    ("locked", "不锁定"),
+    ("sources", "来源"),
+    ("submit", "你的决策"),
+)
+NAV_LINKS_GATE_B: tuple[tuple[str, str], ...] = (
+    ("overview", "速览"),
+    ("advice", "建议与分数"),
+    ("data", "数据对比"),
+    ("compare", "候选对比"),
+    ("locked", "你的选定"),
+    ("sources", "来源"),
+    ("submit", "你的决策"),
+)
+
+#: 闸门专用样式。只在板里显式声明了 gate 时追加，旧板 CSS 一字不改（逐字节回归）。
+_GATE_CSS = """
+.gate-banner{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 16px;
+  padding:12px 16px;border-radius:var(--radius);
+  border:1px solid var(--brand-border);background:var(--brand-soft);
+}
+.gate-banner.gate-b{border-color:var(--warn-border);background:var(--warn-bg)}
+.gate-banner .gb-tag{
+  font-weight:700;letter-spacing:.02em;padding:2px 12px;border-radius:var(--pill);
+  background:var(--brand);color:var(--brand-ink);font-size:13px;
+}
+.gate-banner.gate-b .gb-tag{background:var(--warn);color:#1b1f24}
+.gate-banner .gb-text{font-size:13.5px;color:var(--text-2)}
+.gate-flag{
+  display:inline-flex;align-items:center;padding:2px 10px;border-radius:var(--pill);
+  border:1px solid var(--brand);color:var(--brand);font-size:12px;font-weight:700;
+  letter-spacing:.04em;
+}
+@media (prefers-color-scheme:dark){.gate-flag{border-color:var(--brand-border);color:var(--link)}}
+.gate-flag.gate-b{border-color:var(--warn-border);color:var(--warn-ink)}
+.score{
+  display:inline-flex;align-items:baseline;gap:2px;font-family:var(--mono);
+  white-space:nowrap;
+}
+.score b{font-size:16px;font-weight:700;color:var(--text)}
+.score span{font-size:11.5px;color:var(--text-3)}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px}
+@media (max-width:760px){.pc{grid-template-columns:1fr}}
+.pc ul{margin:6px 0 0;padding-left:18px}
+.pc li{margin:2px 0;font-size:13.5px;color:var(--text-2)}
+.pc-pro{border-left:3px solid var(--accent-border);padding-left:10px}
+.pc-con{border-left:3px solid var(--danger-border);padding-left:10px}
+.pc-pro b{color:var(--accent)}
+.pc-con b{color:var(--danger)}
+.adv{
+  border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);
+  padding:12px 14px;margin:10px 0;
+}
+.adv-rec{border-color:var(--accent-border);background:var(--accent-bg)}
+.adv-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px}
+.adv-head h4{margin:0;font-size:14.5px}
+.why-not{margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);
+  background:var(--danger-bg);border:1px solid var(--danger-border)}
+.why-not b{color:var(--danger)}
+.why-not ul{margin:6px 0 0;padding-left:18px}
+.when-better{margin-top:8px;padding:10px 12px;border-radius:var(--radius-sm);
+  background:var(--surface-2);border:1px dashed var(--border-strong);font-size:13.5px}
+.when-better b{color:var(--brand)}
+.dims{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.dims .dim{
+  font-family:var(--mono);font-size:11.5px;padding:1px 8px;border-radius:var(--pill);
+  border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);
+}
+.row-base td{background:var(--surface-2);font-style:italic}
+.slice-head{margin:16px 0 8px;font-weight:650;font-size:14px;color:var(--text-2)}
+.paradigm-family{
+  font-family:var(--mono);font-size:11.5px;padding:1px 8px;border-radius:var(--pill);
+  border:1px solid var(--brand-border);color:var(--brand);background:var(--brand-soft);
+}
+.cost-low{color:var(--accent);font-weight:650}
+.cost-medium{color:var(--warn-ink);font-weight:650}
+.cost-high{color:var(--danger);font-weight:650}
+.pick-mark{color:var(--accent);font-weight:700}
+"""
+
 # ---------------------------------------------------------------------------
 # 内联样式表（零外链：无 @import、无 url()、无外部字体）
 # ---------------------------------------------------------------------------
@@ -829,14 +934,14 @@ _INLINE_SCRIPT = """
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
-    a.download = "design_board_submission.json";
+    a.download = "__MM_SUBMISSION_FILE__";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
     setStatus(
-      "离线模式：已下载 design_board_submission.json。请把它交给 AI 运行 " +
-      "python tools/design_board.py ingest --workspace . --from design_board_submission.json",
+      "离线模式：已下载 __MM_SUBMISSION_FILE__。请把它交给 AI 运行 " +
+      "python tools/design_board.py ingest --workspace .__MM_GATE_ARG__ --from __MM_SUBMISSION_FILE__",
       "ok"
     );
   }
@@ -1144,6 +1249,171 @@ def _render_time(board: dict) -> str:
         if isinstance(raw, str) and raw.strip():
             return raw.strip()
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+
+
+# ---------------------------------------------------------------------------
+# 闸门判定与 gate b 的建议/范式取数
+# ---------------------------------------------------------------------------
+
+
+def _declared_gate(board: dict) -> str | None:
+    """板里显式声明了 gate（a / b）才返回；旧板返回 None，走 legacy 渲染。"""
+    raw = board.get("gate")
+    if isinstance(raw, str) and raw.strip().lower() in GATE_LABELS:
+        return raw.strip().lower()
+    return None
+
+
+def _resolve_gate(board: dict, gate: str | None) -> str | None:
+    """渲染用闸门：板自报优先；否则只有显式 gate=b 才算 B 板。
+
+    这样"旧 A 板 + gate=a"仍是 legacy 渲染（输出逐字节不变），而新 B 板即使
+    忘了写 gate 字段也能按 B 板渲染。
+    """
+    declared = _declared_gate(board)
+    if declared:
+        return declared
+    if isinstance(gate, str) and gate.strip().lower() == "b":
+        return "b"
+    return None
+
+
+def _gate_banner(gate: str | None) -> str:
+    """页头闸门横幅（醒目写出"这是 A 闸门 / B 闸门"）。"""
+    if not gate:
+        return ""
+    label = GATE_LABELS.get(gate, gate)
+    subtitle = GATE_SUBTITLES.get(gate, "")
+    return (
+        f'<div class="gate-banner gate-{_e(gate)}" role="note">'
+        f'<span class="gb-tag">这是 {_e(label)}</span>'
+        f'<span class="gb-text">{_e(subtitle)}</span></div>'
+    )
+
+
+def _gate_suffix(gate: str | None) -> str:
+    """命令行里的闸门参数后缀：A 板为空串（保持旧文案），B 板为 --gate b。"""
+    return " --gate b" if gate == "b" else ""
+
+
+def _paradigms(question: dict) -> list[dict]:
+    """某题的 paradigm_set 对象项（缺失/脏数据返回空列表）。"""
+    return [item for item in _as_list(question.get("paradigm_set")) if isinstance(item, dict)]
+
+
+def _has_paradigms(questions: Sequence[dict]) -> bool:
+    """任意一题是否带范式集合（A 板 schema v2 才有）。"""
+    return any(_paradigms(question) for question in questions)
+
+
+def _explore_cost(paradigm: dict) -> tuple[str, str]:
+    """探索成本：返回 (等级, 一句话说明)。"""
+    cost = _as_dict(paradigm.get("explore_cost"))
+    level = _text(cost.get("level")).strip().lower()
+    note = _clip(cost.get("note"), 60)
+    return level, note
+
+
+def _cost_html(paradigm: dict) -> str:
+    """探索成本单元格：等级上色 + 一句话说明。"""
+    level, note = _explore_cost(paradigm)
+    label = {"low": "低", "medium": "中", "high": "高"}.get(level, level or "未标")
+    css = f"cost-{level}" if level in ("low", "medium", "high") else "muted"
+    body = f'<span class="{css}">{_e(label)}</span>'
+    if note:
+        body += f'<div class="cell-sub">{_e(note)}</div>'
+    return body
+
+
+def _advice_for(board: dict, question: dict) -> dict:
+    """某题的建议块：题内 advice 优先，其次板级 advice（单问 B 板的兼容写法）。"""
+    advice = _as_dict(question.get("advice"))
+    if advice:
+        return advice
+    return _as_dict(board.get("advice"))
+
+
+def _advice_candidates(advice: dict) -> dict[str, dict]:
+    """advice.candidates 按 option_id 建索引。"""
+    index: dict[str, dict] = {}
+    for item in _as_list(advice.get("candidates")):
+        if not isinstance(item, dict):
+            continue
+        option_id = _text(item.get("option_id") or item.get("id")).strip()
+        if option_id:
+            index[option_id] = item
+    return index
+
+
+def _verdict_key(option: dict, candidate: dict | None = None) -> str:
+    """建议结论归一化：recommended / not_recommended / unknown。"""
+    raw = _text(option.get("verdict") or (candidate or {}).get("verdict")).strip().lower()
+    if raw in ("recommended", "recommend"):
+        return "recommended"
+    if raw in ("not_recommended", "not-recommended", "rejected", "reject"):
+        return "not_recommended"
+    return "unknown"
+
+
+def _verdict_badge(option: dict, candidate: dict | None = None) -> str:
+    """建议徽章：建议采用（绿）/ 不建议（红）/ 未表态（灰）。"""
+    key = _verdict_key(option, candidate)
+    if key == "recommended":
+        return _badge("🟢 建议采用", "ok")
+    if key == "not_recommended":
+        return _badge("⛔ 不建议", "danger")
+    return _badge("⚪ 未表态", "muted")
+
+
+def _score_of(option: dict, candidate: dict | None = None) -> object:
+    """候选分数：option.score 优先，其次 advice candidate 里的 score。"""
+    value = option.get("score")
+    if value is None and candidate:
+        value = candidate.get("score")
+    return value
+
+
+def _score_html(option: dict, candidate: dict | None = None) -> str:
+    """分数单元格：大号数字 + /100。"""
+    value = _score_of(option, candidate)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return '<span class="muted">—</span>'
+    return f'<span class="score"><b>{_num_text(float(value))}</b><span>/100</span></span>'
+
+
+def _dims_html(candidate: dict, rubric: dict) -> str:
+    """维度分芯片组：按评分口径顺序输出 key=score(w=权重)。"""
+    scores = _as_dict(candidate.get("dimension_scores"))
+    if not scores:
+        return '<span class="muted">—</span>'
+    chips: list[str] = []
+    seen: list[str] = []
+    for dimension in _as_list(rubric.get("dimensions")):
+        if not isinstance(dimension, dict):
+            continue
+        key = _text(dimension.get("id")).strip()
+        if not key:
+            continue
+        seen.append(key)
+        weight = dimension.get("weight")
+        label = f"{key}={_num_text(scores.get(key)) if isinstance(scores.get(key), (int, float)) else '—'}"
+        if isinstance(weight, (int, float)) and not isinstance(weight, bool):
+            label += f"(w={weight:g})"
+        chips.append(f'<span class="dim">{_e(label)}</span>')
+    for key, value in scores.items():
+        if key not in seen:
+            chips.append(f'<span class="dim">{_e(f"{key}={value}")}</span>')
+    return f'<div class="dims">{"".join(chips)}</div>'
+
+
+def _bullet_list(value: object) -> list[str]:
+    """把 JSON 数组压成非空字符串列表（用于 pros / cons / why_not）。"""
+    items: list[str] = []
+    for item in _as_list(value):
+        text = _text(item).strip()
+        if text:
+            items.append(text)
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -1933,8 +2203,8 @@ def _page_title(board: dict, title: str | None) -> str:
     return value or "建模方案决策板"
 
 
-def _render_topbar(board: dict) -> str:
-    """吸顶状态条：品牌 + 确认状态 + 轮次 + 确认码。"""
+def _render_topbar(board: dict, gate: str | None = None) -> str:
+    """吸顶状态条：品牌 + 闸门标识 + 确认状态 + 轮次 + 确认码。"""
     confirmed = _board_confirmed(board)
     status = _badge("✅ 已确认", "ok") if confirmed else _badge("⏳ 待确认", "warn")
     revision = board.get("revision")
@@ -1947,9 +2217,14 @@ def _render_topbar(board: dict) -> str:
         if code
         else '<span class="pill pill-code">确认码 <b>未生成</b></span>'
     )
+    gate_html = ""
+    if gate:
+        label = GATE_LABELS.get(gate, gate)
+        gate_html = f'<span class="gate-flag gate-{_attr(gate)}">这是 {_e(label)}</span>'
     return (
         '<div class="topbar"><div class="topbar-inner">'
         '<span class="tb-brand">建模方案决策板</span>'
+        f"{gate_html}"
         f'<span class="tb-sep" aria-hidden="true"></span>{status}{round_text}'
         '<span class="spacer"></span>'
         f"{code_html}"
@@ -1957,8 +2232,14 @@ def _render_topbar(board: dict) -> str:
     )
 
 
-def _render_hero(board: dict, page_title: str) -> str:
-    """页头：标题、状态徽章、revision、生成时间、题目来源与锚点导航。"""
+def _render_hero(
+    board: dict,
+    page_title: str,
+    *,
+    gate: str | None = None,
+    nav: Sequence[tuple[str, str]] = NAV_LINKS,
+) -> str:
+    """页头：闸门横幅、标题、状态徽章、revision、生成时间、题目来源与锚点导航。"""
     confirmed = _board_confirmed(board)
     meta: list[str] = []
     meta.append(_badge("✅ 已确认", "ok") if confirmed else _badge("⏳ 待确认", "warn"))
@@ -1980,14 +2261,21 @@ def _render_hero(board: dict, page_title: str) -> str:
         if source_text
         else ""
     )
-    links = "".join(f'<a href="#{anchor}">{_e(label)}</a>' for anchor, label in NAV_LINKS)
+    links = "".join(f'<a href="#{anchor}">{_e(label)}</a>' for anchor, label in nav)
+    eyebrow = GATE_EYEBROWS.get(gate, "Math Modeling · Phase 0.5 · Design Gate") if gate else (
+        "Math Modeling · Phase 0.5 · Design Gate"
+    )
+    lede = GATE_LEADS.get(gate) if gate else (
+        "这是 AI 在写任何代码之前提交的建模决策：每个小问的候选算法、"
+        "真实试算数值、主要风险与方法来源。选定权在你——页面上的选择与批注需要你确认后，"
+        "才会进入建模阶段。"
+    )
     return (
         '<header class="hero">'
-        '<div class="eyebrow">Math Modeling · Phase 0.5 · Design Gate</div>'
+        f'<div class="eyebrow">{_e(eyebrow)}</div>'
+        f"{_gate_banner(gate)}"
         f"<h1>{_e(page_title)}</h1>"
-        '<p class="lede">这是 AI 在写任何代码之前提交的建模决策：每个小问的候选算法、'
-        "真实试算数值、主要风险与方法来源。选定权在你——页面上的选择与批注需要你确认后，"
-        "才会进入建模阶段。</p>"
+        f'<p class="lede">{_e(lede)}</p>'
         f'<div class="meta">{"".join(meta)}</div>'
         f"{source_html}"
         f'<nav class="jump" aria-label="跳到"><span class="jump-label">跳到：</span>{links}</nav>'
@@ -1995,9 +2283,11 @@ def _render_hero(board: dict, page_title: str) -> str:
     )
 
 
-def _render_confirm(board: dict) -> str:
+def _render_confirm(board: dict, gate: str | None = None) -> str:
     """确认码卡片：4 位大号码 + "AI 不得代填"说明 + 来源与状态。"""
     confirmed = _board_confirmed(board)
+    suffix = _gate_suffix(gate)
+    gate_label = GATE_LABELS.get(gate, "") if gate else ""
     code = _text(board.get("confirm_code")).strip()
     hash_value = _text(board.get("board_sha256")).strip()
 
@@ -2026,15 +2316,19 @@ def _render_confirm(board: dict) -> str:
     if not code:
         hint = (
             "确认码尚未生成：先运行 "
-            "<code>python tools/design_board.py render --workspace .</code>，"
+            f"<code>python tools/design_board.py render --workspace .{_e(suffix)}</code>，"
             "render 会计算 board_sha256 并把 4 位确认码写回 JSON，重新打开本页即可看到。"
         )
     elif confirmed:
-        hint = "确认已完成：闸门已开，AI 可以进入建模阶段。"
+        hint = (
+            f"{_e(gate_label)}已确认：该闸门已开，AI 可以继续下一步。"
+            if gate
+            else "确认已完成：闸门已开，AI 可以进入建模阶段。"
+        )
     else:
         hint = (
             "核对完本页内容后，<b>由你本人</b>在终端运行 "
-            "<code>python tools/design_board.py confirm --workspace . --apply</code> "
+            f"<code>python tools/design_board.py confirm --workspace .{_e(suffix)} --apply</code> "
             "并输入上面的 4 位码；AI 不得代跑此命令。"
         )
 
@@ -2048,7 +2342,8 @@ def _render_confirm(board: dict) -> str:
         '<div class="confirm-bar" aria-hidden="true"></div>'
         '<div class="confirm-inner">'
         '<div class="confirm-main">'
-        '<div class="confirm-kicker" id="confirm-h">确认码 · CONFIRM CODE</div>'
+        f'<div class="confirm-kicker" id="confirm-h">确认码 · CONFIRM CODE'
+        f'{" · " + _e(gate_label) if gate_label else ""}</div>'
         f"{code_html}"
         '<p class="confirm-note"><strong>AI 不得代填此码</strong>；'
         "确认后才会进入建模阶段。</p>"
@@ -2078,8 +2373,16 @@ def _section(number: str, anchor: str, heading: str, body: str, *, hint: str = "
     )
 
 
-def _render_overview(board: dict, questions: list[dict]) -> str:
-    """01 结论速览：每题当前选择的紧凑表格 + 题目小问清单。"""
+def _render_overview(
+    board: dict,
+    questions: list[dict],
+    number: str = "01",
+    gate: str | None = None,
+) -> str:
+    """01 结论速览：每题当前选择的紧凑表格 + 题目小问清单。
+
+    B 板把"一句话理由"换成"总分 + 建议"：选型看的是分数与建议结论。
+    """
     summary = _as_dict(board.get("problem_summary"))
     parts: list[str] = []
     summary_questions = [item for item in _as_list(summary.get("questions")) if _present(item)]
@@ -2092,7 +2395,7 @@ def _render_overview(board: dict, questions: list[dict]) -> str:
             '<div class="empty">决策板里没有 questions：请先在 design_board.json 里'
             "为至少一个小问生成 2 个以上候选方案。</div>"
         )
-        return _section("01", "overview", "结论速览", "".join(parts), hint="3 秒读完")
+        return _section(number, "overview", "结论速览", "".join(parts), hint="3 秒读完")
 
     rows: list[list[str]] = []
     for index, question in enumerate(questions):
@@ -2105,20 +2408,39 @@ def _render_overview(board: dict, questions: list[dict]) -> str:
             option_id = _text(chosen.get("id")).strip()
             name = _text(chosen.get("name")).strip() or "（未命名方案）"
             chosen_cell = f'<b>{_e(option_id)} · {_e(name)}</b>'
-        rationale = _clip(chosen.get("rationale"), 60) if chosen else ""
-        rationale_cell = _e(rationale) if rationale else '<span class="muted">—</span>'
         id_cell = f'<b class="mono">{_e(question_id)}</b>'
         if goal:
             id_cell += f'<div class="cell-sub">{_e(goal)}</div>'
+        if gate == "b":
+            candidate = _advice_candidates(_advice_for(board, question)).get(
+                _text(chosen.get("id")).strip(), {}
+            ) if chosen else {}
+            rows.append([
+                id_cell,
+                chosen_cell,
+                _score_html(chosen, candidate) if chosen else '<span class="muted">—</span>',
+                _verdict_badge(chosen, candidate) if chosen else '<span class="muted">—</span>',
+                _status_badges(question),
+            ])
+            continue
+        rationale = _clip(chosen.get("rationale"), 60) if chosen else ""
+        rationale_cell = _e(rationale) if rationale else '<span class="muted">—</span>'
         rows.append([id_cell, chosen_cell, rationale_cell, _status_badges(question)])
 
-    table = _table(
-        ["题号", "选定方案", "一句话理由", "状态"],
-        rows,
-        caption="结论速览：每个小问当前选定的方案",
-    )
+    if gate == "b":
+        table = _table(
+            ["题号", "选定方案", "总分", "建议", "状态"],
+            rows,
+            caption="结论速览：每个小问当前选定的方案",
+        )
+    else:
+        table = _table(
+            ["题号", "选定方案", "一句话理由", "状态"],
+            rows,
+            caption="结论速览：每个小问当前选定的方案",
+        )
     parts.append(table)
-    return _section("01", "overview", "结论速览", "".join(parts), hint="3 秒读完")
+    return _section(number, "overview", "结论速览", "".join(parts), hint="3 秒读完")
 
 
 def _render_pending_callout(board: dict) -> str:
@@ -2191,7 +2513,12 @@ def _render_option_card(question: dict, option: dict, index: int) -> str:
     )
 
 
-def _render_options(board: dict, questions: list[dict]) -> str:
+def _render_options(
+    board: dict,
+    questions: list[dict],
+    number: str = "03",
+    gate: str | None = None,
+) -> str:
     """03 待决项：附加待决项 + 每题候选卡片组。"""
     parts = [_render_pending_callout(board)]
     if not questions:
@@ -2199,10 +2526,16 @@ def _render_options(board: dict, questions: list[dict]) -> str:
             '<div class="empty">没有可比较的候选方案：请在 design_board.json 的 questions'
             "里补上每个小问的 options（至少“推荐 + 备选”两个）。</div>"
         )
+    elif gate == "a" and not any(_options(question) for question in questions):
+        # A 板 schema v2：候选留空是合法的，选型在 B 闸门。
+        parts.append(
+            '<div class="empty">A 闸门不列模型候选：本板只确认题意框架与待探索范式集合，'
+            "具体模型在 B 闸门（Phase 1.5）对比后由你择定。</div>"
+        )
     else:
         parts.extend(_render_question_block(question, index) for index, question in enumerate(questions))
     hint = "AI 只提供对比，选择权在你"
-    return _section("03", "options", "待决项与候选方案", "".join(parts), hint=hint)
+    return _section(number, "options", "待决项与候选方案", "".join(parts), hint=hint)
 
 
 # ---------------------------------------------------------------------------
@@ -2210,16 +2543,23 @@ def _render_options(board: dict, questions: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _render_compare(questions: list[dict]) -> str:
-    """04 候选方案对比表：每题一张表，推荐项整行浅绿。"""
+def _render_compare(
+    board: dict,
+    questions: list[dict],
+    number: str = "04",
+    gate: str | None = None,
+) -> str:
+    """04 候选方案对比表：A 板看推荐度与风险，B 板看分数与专属指标。"""
     if not questions:
         return _section(
-            "04",
+            number,
             "compare",
             "候选方案对比",
             '<div class="empty">没有候选方案可对比。</div>',
             hint="推荐项整行浅绿",
         )
+    if gate == "b":
+        return _render_compare_gate_b(board, questions, number)
     parts: list[str] = [
         '<p class="muted" style="font-size:13px;margin-bottom:14px">'
         "先看推荐度与主要风险，再核对试算是否为真实数值（应附复跑命令）。"
@@ -2258,15 +2598,70 @@ def _render_compare(questions: list[dict]) -> str:
             )
         )
     hint = f"共 {len(questions)} 题"
-    return _section("04", "compare", "候选方案对比", "".join(parts), hint=hint)
+    return _section(number, "compare", "候选方案对比", "".join(parts), hint=hint)
 
 
-def _render_locked(questions: list[dict]) -> str:
-    """05 已锁定：user_locked == true 的项，明确"AI 不得推翻"。"""
+def _render_compare_gate_b(board: dict, questions: list[dict], number: str) -> str:
+    """B 板的候选对比表：建议结论 + 总分 + 专属指标 + 试算回溯。"""
+    parts: list[str] = [
+        '<p class="muted" style="font-size:13px;margin-bottom:14px">'
+        "总分来自建议 Agent；专属指标（own）只在同一候选的不同切片之间可比，"
+        "横向比较只看可比层（见「数据对比」）。浅绿行 = 建议项，不代表最终选择。</p>"
+    ]
+    for index, question in enumerate(questions):
+        question_id = _question_id(question, index)
+        goal = _clip(question.get("goal"), 70)
+        advice = _advice_for(board, question)
+        candidates = _advice_candidates(advice)
+        rubric = _as_dict(advice.get("scoring_rubric"))
+        parts.append(
+            f'<div class="sub-head"><span class="mono">{_e(question_id)}</span>'
+            f"<h3>{_e(goal or '（未填写 goal）')}</h3></div>"
+        )
+        rows: list[list[str]] = []
+        row_classes: list[str] = []
+        for option_index, option in enumerate(_options(question)):
+            option_id = _option_id(option, option_index)
+            name = _text(option.get("name")).strip() or "（未命名方案）"
+            candidate = candidates.get(option_id, {})
+            chosen = _text(question.get("user_choice")).strip() == option_id
+            own = _as_dict(candidate.get("own"))
+            own_text = "、".join(f"{key}={_text(value)}" for key, value in own.items()) or "—"
+            refs = _bullet_list(candidate.get("evidence_refs"))
+            rows.append([
+                f'<b class="mono">{_e(option_id)}</b> {_e(name)}'
+                + (f' <span class="badge badge-ok">✓ 已选</span>' if chosen else ""),
+                _verdict_badge(option, candidate),
+                _score_html(option, candidate),
+                _dims_html(candidate, rubric),
+                f'<span class="mono">{_e(_clip(own_text, 46))}</span>',
+                f'<span class="mono">{_e(_clip(refs[0], 46)) if refs else "—"}</span>',
+            ])
+            row_classes.append("row-rec" if _verdict_key(option, candidate) == "recommended" else "")
+        parts.append(
+            _table(
+                ["方案", "建议", "总分", "维度分", "专属指标", "回溯"],
+                rows,
+                caption=f"{question_id} 的候选方案对比（B 闸门）",
+                row_classes=row_classes,
+            )
+        )
+    hint = f"共 {len(questions)} 题"
+    return _section(number, "compare", "候选方案对比", "".join(parts), hint=hint)
+
+
+def _render_locked(questions: list[dict], number: str = "05", gate: str | None = None) -> str:
+    """05 已锁定：user_locked == true 的项，明确"AI 不得推翻"。
+
+    A 板（schema v2）**不再承载模型选型**，因此整节改为"本板不锁定模型选型"空态；
+    旧板（未声明 gate）保持原样，避免既有样例逐字节漂移。
+    """
+    if gate == "a":
+        return _render_locked_gate_a(questions, number)
     locked = [question for question in questions if question.get("user_locked") is True]
     if not locked:
         return _section(
-            "05",
+            number,
             "locked",
             "已锁定事项",
             '<div class="empty">暂无锁定项（所有 <code>user_locked</code> 均为 false）。</div>',
@@ -2304,7 +2699,347 @@ def _render_locked(questions: list[dict]) -> str:
         caption="已锁定事项：AI 不得推翻",
     )
     hint = f"{len(locked)} 项"
-    return _section("05", "locked", "已锁定事项", callout + table, hint=hint)
+    return _section(number, "locked", "已锁定事项", callout + table, hint=hint)
+
+
+def _render_locked_gate_a(questions: list[dict], number: str) -> str:
+    """A 板的"不锁定"空态：A 闸门只确认框架与范式集合，不锁模型选型。"""
+    offending = [question for question in questions if question.get("user_locked") is True]
+    body = (
+        '<div class="empty"><b>本板不锁定模型选型。</b><br>'
+        "A 闸门只确认题意框架、高严重度假设与待探索范式集合；具体用哪个模型由 "
+        "B 闸门（Phase 1.5）择定。任何 user_locked 都会被 checker 判为 "
+        "<code>gate_a_user_locked_forbidden</code>。</div>"
+    )
+    if offending:
+        ids = "、".join(_question_id(question, index) for index, question in enumerate(questions)
+                        if question.get("user_locked") is True)
+        body += (
+            '<div class="callout callout-danger"><div>'
+            f"<b>检测到 {len(offending)} 项 user_locked: true（{_e(ids)}）。</b><br>"
+            "A 板必须把它们改回 false，否则闸门判不通过。</div></div>"
+        )
+    return _section(number, "locked", "本板不锁定模型选型", body, hint="A 闸门不选型")
+
+
+def _render_paradigm(board: dict, questions: list[dict], number: str = "02") -> str:
+    """A 板新增：待探索范式集合（范式 / 方法族 / 来源 / 探索成本 / 为什么探索）。"""
+    parts: list[str] = [
+        '<p class="muted" style="font-size:13px;margin-bottom:14px">'
+        "这是探索边界，不是最终方案：只有 paradigm_selection 里的范式才会进入 Phase 1 "
+        "五视角深挖；具体模型在 B 闸门比较后由你择定。</p>"
+    ]
+    if not _has_paradigms(questions):
+        parts.append(
+            '<div class="empty">本板没有 paradigm_set（旧板 schema）。'
+            "A 闸门 schema v2 要求每问 3–5 个待探索范式，并在 paradigm_selection 里勾选子集。</div>"
+        )
+        return _section(number, "paradigm", "待探索范式集合", "".join(parts), hint="A 闸门不选型")
+
+    for index, question in enumerate(questions):
+        question_id = _question_id(question, index)
+        goal = _clip(question.get("goal"), 70)
+        paradigms = _paradigms(question)
+        if not paradigms:
+            continue
+        selection = [_text(item).strip() for item in _as_list(question.get("paradigm_selection"))]
+        selection = [item for item in selection if item]
+        parts.append(
+            f'<div class="sub-head"><span class="mono">{_e(question_id)}</span>'
+            f"<h3>{_e(goal or '（未填写 goal）')}</h3></div>"
+        )
+        if selection:
+            chips = "".join(
+                f'<span class="pick-mark">✓ {_e(item)}</span>' for item in selection
+            )
+            parts.append(f'<p class="muted" style="font-size:13px">已选范式：{chips}</p>')
+        else:
+            parts.append(
+                '<p class="muted" style="font-size:13px">已选范式：'
+                '<span class="badge badge-warn">尚未选择</span> '
+                "paradigm_selection 为空，请在回执里勾选（≥2 项且至少含 1 个异质族）。</p>"
+            )
+        rows: list[list[str]] = []
+        families: dict[str, int] = {}
+        for paradigm in paradigms:
+            family = _text(paradigm.get("family")).strip()
+            families[family] = families.get(family, 0) + 1
+        for paradigm in paradigms:
+            paradigm_id = _text(paradigm.get("paradigm_id")).strip() or "—"
+            name = _text(paradigm.get("name")).strip() or "（未命名范式）"
+            family = _text(paradigm.get("family")).strip() or "未标"
+            source = _as_dict(paradigm.get("source_ref"))
+            tier = _text(source.get("tier")).strip()
+            picked = paradigm_id in selection
+            id_cell = f'<b class="mono">{_e(paradigm_id)}</b>'
+            if picked:
+                id_cell += ' <span class="pick-mark">✓</span>'
+            source_cell = (
+                f'<span class="mono">{_e(_source_headline(source))}</span>'
+                + (f' <span class="muted">· {_e(tier)}</span>' if tier else "")
+                + " "
+                + _verified_badge(source)
+            )
+            rows.append([
+                id_cell,
+                f'<b>{_e(name)}</b>',
+                f'<span class="paradigm-family">{_e(family)}</span>',
+                source_cell,
+                _cost_html(paradigm),
+                _e(_clip(paradigm.get("why_explore"), 120) or "—"),
+            ])
+        parts.append(
+            _table(
+                ["范式", "名称", "方法族", "来源 / tier / 核验", "探索成本", "为什么探索"],
+                rows,
+                caption=f"{question_id} 的待探索范式集合",
+            )
+        )
+        if len(families) <= 1 and len(paradigms) >= 2:
+            parts.append(
+                '<div class="callout callout-warn"><div>'
+                "<b>方法族过于单一。</b>每问至少要有一个 family 与其余不同（契约 §4 硬规则 4），"
+                "否则五视角会收敛到同一条思路。</div></div>"
+            )
+        parts.append("")
+    hint = f"{len(questions)} 题"
+    return _section(number, "paradigm", "待探索范式集合", "".join(parts), hint=hint)
+
+
+def _render_advice(board: dict, questions: list[dict], number: str = "02") -> str:
+    """B 板核心：候选分数与维度分、每模型 pros/cons、why_not 与 when_better。"""
+    parts: list[str] = []
+    advice_any = next((_advice_for(board, question) for question in questions if _advice_for(board, question)), {})
+    is_judge = advice_any.get("is_judge_panel")
+    disclaimer = _text(advice_any.get("disclaimer")).strip()
+    if not advice_any:
+        parts.append(
+            '<div class="callout callout-warn"><div><b>本板没有嵌入 advice。</b><br>'
+            "B 板应当把 model_advice.json 的内容嵌进每题 advice，"
+            "否则分数、优缺点与数据对比都无从核对。</div></div>"
+        )
+    else:
+        parts.append(
+            '<div class="callout callout-warn"><div>'
+            '<b>这是选型建议，不是评委审查。</b>'
+            f"{(' ' + _e(disclaimer)) if disclaimer else ''}"
+            f"<br>{_badge('评委审查在 Phase 4', 'muted', mono=True)}</div></div>"
+        )
+        if is_judge is True:
+            parts.append(
+                '<div class="callout callout-danger"><div>'
+                "<b>advice 自称评委结论（is_judge_panel=true）。</b><br>"
+                "B 板只是选型建议，checker 会判 advice_is_not_judge_panel。</div></div>"
+            )
+
+    rubric = _as_dict(advice_any.get("scoring_rubric"))
+    dimensions = _as_list(rubric.get("dimensions"))
+    if dimensions:
+        rubric_rows: list[list[str]] = []
+        for dimension in dimensions:
+            if not isinstance(dimension, dict):
+                continue
+            weight = dimension.get("weight")
+            rubric_rows.append([
+                f'<span class="mono">{_e(_text(dimension.get("id")).strip() or "—")}</span>',
+                _e(_text(dimension.get("name")).strip() or "—"),
+                _e(f"{weight:g}" if isinstance(weight, (int, float)) and not isinstance(weight, bool) else "—"),
+            ])
+        parts.append(
+            _table(
+                ["维度", "名称", "权重"],
+                rubric_rows,
+                caption="建议 Agent 的评分口径",
+            )
+        )
+
+    for index, question in enumerate(questions):
+        question_id = _question_id(question, index)
+        goal = _clip(question.get("goal"), 70)
+        advice = _advice_for(board, question)
+        candidates = _advice_candidates(advice)
+        options = _options(question)
+        parts.append(
+            f'<div class="sub-head"><span class="mono">{_e(question_id)}</span>'
+            f"<h3>{_e(goal or '（未填写 goal）')}</h3></div>"
+        )
+        if not options:
+            parts.append('<div class="empty">本题没有候选项（B 板要求 5–8 个候选）。</div>')
+            continue
+        score_rows: list[list[str]] = []
+        row_classes: list[str] = []
+        for option_index, option in enumerate(options):
+            option_id = _option_id(option, option_index)
+            candidate = candidates.get(option_id, {})
+            chosen = _text(question.get("user_choice")).strip() == option_id
+            name = _text(option.get("name")).strip() or "（未命名方案）"
+            origin = _text(candidate.get("origin") or option.get("origin")).strip() or "—"
+            paradigm_id = _text(candidate.get("paradigm_id") or option.get("paradigm_id")).strip() or "—"
+            score_rows.append([
+                f'<b class="mono">{_e(option_id)}</b> {_e(name)}'
+                + (f' <span class="badge badge-ok">✓ 已选</span>' if chosen else ""),
+                _verdict_badge(option, candidate),
+                _score_html(option, candidate),
+                _dims_html(candidate, rubric),
+                f'<span class="mono">{_e(origin)}</span>',
+                f'<span class="mono">{_e(paradigm_id)}</span>',
+            ])
+            row_classes.append("row-rec" if _verdict_key(option, candidate) == "recommended" else "")
+        parts.append(
+            _table(
+                ["方案", "建议", "总分", "维度分", "来源视角", "范式"],
+                score_rows,
+                caption=f"{question_id} 的候选分数",
+                row_classes=row_classes,
+            )
+        )
+        for option_index, option in enumerate(options):
+            option_id = _option_id(option, option_index)
+            candidate = candidates.get(option_id, {})
+            if not candidate:
+                continue
+            parts.append(_render_advice_card(option, candidate, option_id))
+        note = _text(advice.get("aggregate_note")).strip()
+        if note:
+            parts.append(
+                '<div class="callout callout-brand"><div>'
+                f"<b>汇总说明</b><br>{_e(note)}</div></div>"
+            )
+    hint = "分数不是评委结论"
+    return _section(number, "advice", "建议与评分", "".join(parts), hint=hint)
+
+
+def _render_advice_card(option: dict, candidate: dict, option_id: str) -> str:
+    """单个候选的建议卡片：pros / cons / why_not / when_better / 证据。"""
+    name = _text(option.get("name")).strip() or "（未命名方案）"
+    verdict = _verdict_key(option, candidate)
+    classes = "adv adv-rec" if verdict == "recommended" else "adv"
+    pros = _bullet_list(candidate.get("pros"))
+    cons = _bullet_list(candidate.get("cons"))
+    why_not = _bullet_list(candidate.get("why_not"))
+    when_better = _text(candidate.get("when_better")).strip()
+    evidence = _bullet_list(candidate.get("evidence_refs"))
+
+    body: list[str] = [
+        f'<div class="adv-head">{_verdict_badge(option, candidate)}'
+        f'<h4><span class="mono">{_e(option_id)}</span> · {_e(name)}</h4>'
+        f"{_score_html(option, candidate)}</div>"
+    ]
+    if pros or cons:
+        body.append('<div class="pc">')
+        body.append(
+            '<div class="pc-col pc-pro"><b>优点</b>'
+            + (f'<ul>{"".join(f"<li>{_e(item)}</li>" for item in pros)}</ul>' if pros else
+               '<div class="muted" style="font-size:13px">未给出优点</div>')
+            + "</div>"
+        )
+        body.append(
+            '<div class="pc-col pc-con"><b>缺点</b>'
+            + (f'<ul>{"".join(f"<li>{_e(item)}</li>" for item in cons)}</ul>' if cons else
+               '<div class="muted" style="font-size:13px">未给出缺点</div>')
+            + "</div>"
+        )
+        body.append("</div>")
+    if why_not:
+        body.append(
+            '<div class="why-not"><b>为什么不建议</b><ul>'
+            + "".join(f"<li>{_e(item)}</li>" for item in why_not)
+            + "</ul></div>"
+        )
+    if when_better:
+        body.append(
+            f'<div class="when-better"><b>什么情况下它更好</b><br>{_e(when_better)}</div>'
+        )
+    if evidence:
+        chips = "".join(f'<span class="chip"><i>证据</i>=<b>{_e(item)}</b></span>' for item in evidence)
+        body.append(f'<div class="chips" style="margin-top:8px">{chips}</div>')
+    return f'<article class="{classes}">{"".join(body)}</article>'
+
+
+def _render_data_comparison(board: dict, questions: list[dict], number: str = "03") -> str:
+    """B 板：多组数据对比（可比层列的横向对比 + 专属层 + baseline 参照行）。"""
+    parts: list[str] = [
+        '<p class="muted" style="font-size:13px;margin-bottom:14px">'
+        "可比层（comparable）是唯一允许横向比较的层；专属层（own）只在同一候选的不同切片之间可比。"
+        "baseline 行只作参照，不占候选名额。</p>"
+    ]
+    rendered = False
+    for index, question in enumerate(questions):
+        question_id = _question_id(question, index)
+        advice = _advice_for(board, question)
+        comparison = _as_dict(advice.get("data_comparison"))
+        rows = [row for row in _as_list(comparison.get("rows")) if isinstance(row, dict)]
+        baseline = _as_dict(comparison.get("baseline_row")) or None
+        if not rows and not baseline:
+            continue
+        rendered = True
+        parts.append(
+            f'<div class="sub-head"><span class="mono">{_e(question_id)}</span>'
+            f"<h3>{_e(_clip(question.get('goal'), 70) or '（未填写 goal）')}</h3></div>"
+        )
+        columns = [_text(item).strip() for item in _as_list(comparison.get("comparable_columns"))]
+        columns = [item for item in columns if item]
+        pool = rows + ([baseline] if baseline else [])
+        if not columns:
+            for row in pool:
+                for key in _as_dict(row.get("comparable")):
+                    if key not in columns:
+                        columns.append(key)
+        slice_ids: list[str] = []
+        for row in pool:
+            slice_id = _text(row.get("slice_id")).strip()
+            if slice_id and slice_id not in slice_ids:
+                slice_ids.append(slice_id)
+        for slice_id in slice_ids:
+            table_rows: list[list[str]] = []
+            row_classes: list[str] = []
+            for row in rows:
+                if _text(row.get("slice_id")).strip() != slice_id:
+                    continue
+                comparable = _as_dict(row.get("comparable"))
+                own = _as_dict(row.get("own"))
+                option_id = _text(row.get("option_id")).strip() or "—"
+                chosen = _text(question.get("user_choice")).strip() == option_id
+                table_rows.append([
+                    f'<b class="mono">{_e(option_id)}</b>'
+                    + (' <span class="badge badge-ok">✓ 已选</span>' if chosen else ""),
+                    *[
+                        _e(_text(comparable.get(column)) or "—") if column in comparable
+                        else '<span class="muted">—</span>'
+                        for column in columns
+                    ],
+                    "、".join(f"{_e(key)}={_e(value)}" for key, value in own.items()) or "—",
+                    f'<span class="mono">{_e(_text(row.get("trials_ref")).strip() or "—")}</span>',
+                ])
+                row_classes.append("")
+            if baseline and _text(baseline.get("slice_id")).strip() == slice_id:
+                comparable = _as_dict(baseline.get("comparable"))
+                table_rows.append([
+                    f'{_e(_text(baseline.get("option_id")).strip() or "baseline")}（参照）',
+                    *[
+                        _e(_text(comparable.get(column)) or "—") if column in comparable
+                        else '<span class="muted">—</span>'
+                        for column in columns
+                    ],
+                    "—",
+                    '<span class="muted">—</span>',
+                ])
+                row_classes.append("row-base")
+            parts.append(f'<div class="slice-head">切片 {_e(slice_id)}</div>')
+            parts.append(
+                _table(
+                    ["候选", *columns, "专属指标（own）", "回溯"],
+                    table_rows,
+                    caption=f"{question_id} 在切片 {slice_id} 上的实测数据",
+                    row_classes=row_classes,
+                )
+            )
+    if not rendered:
+        parts.append(
+            '<div class="empty">本板未嵌入 data_comparison：请先由 perspective_trial_runner '
+            "产出 perspective_trials.json，再由 model_advice_builder 生成多组数据对比。</div>"
+        )
+    return _section(number, "data", "多组数据对比（工具实跑）", "".join(parts), hint="可比层才可横比")
 
 
 # ---------------------------------------------------------------------------
@@ -2312,7 +3047,7 @@ def _render_locked(questions: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _render_ambiguities(board: dict) -> str:
+def _render_ambiguities(board: dict, number: str = "06") -> str:
     """06 未解决的题意歧义：红色警示卡片；已解决的收进折叠区。"""
     summary = _as_dict(board.get("problem_summary"))
     ambiguities = [item for item in _as_list(summary.get("key_ambiguities")) if isinstance(item, dict)]
@@ -2321,7 +3056,7 @@ def _render_ambiguities(board: dict) -> str:
 
     if not ambiguities:
         return _section(
-            "06",
+            number,
             "ambiguities",
             "题意歧义",
             '<div class="empty">题意审计没有登记歧义项。若题目里确有可分叉的表述，'
@@ -2386,12 +3121,41 @@ def _render_ambiguities(board: dict) -> str:
             f'<div class="inner">{table}</div></details>'
         )
     hint = f"{len(unresolved)} 项待确认" if unresolved else "全部已解决"
-    return _section("06", "ambiguities", "题意歧义", "".join(parts), hint=hint)
+    return _section(number, "ambiguities", "题意歧义", "".join(parts), hint=hint)
 
 
-def _render_sources(questions: list[dict]) -> str:
-    """07 来源速查：把所有候选的 source_ref 汇总成折叠表格。"""
+def _render_sources(
+    questions: list[dict],
+    number: str = "07",
+    gate: str | None = None,
+) -> str:
+    """07 来源速查：把所有候选的 source_ref 汇总成折叠表格。
+
+    A 板的候选通常为空（选型在 B 闸门），来源挂在 paradigm_set 上，
+    因此 A 板同时汇总范式来源，避免"来源速查一片空白"的误导。
+    """
     rows: list[list[str]] = []
+    if gate == "a":
+        for index, question in enumerate(questions):
+            question_id = _question_id(question, index)
+            for paradigm in _paradigms(question):
+                source = _as_dict(paradigm.get("source_ref"))
+                note = _clip(source.get("note"), 70)
+                if source.get("verified") is False:
+                    reason = _text(source.get("unverified_reason")).strip()
+                    prefix = f"未核验原因：{_clip(reason, 50)}" if reason else "未核验原因：未填写"
+                    note = f"{prefix}；{note}" if note else prefix
+                paradigm_id = _text(paradigm.get("paradigm_id")).strip() or "—"
+                name = _text(paradigm.get("name")).strip() or "（未命名范式）"
+                rows.append([
+                    f'<span class="mono">{_e(question_id)}</span>',
+                    f"{_e(paradigm_id)} {_e(name)} {_badge('范式', 'brand')}",
+                    _e(_text(source.get("type")).strip() or "—"),
+                    _e(_text(source.get("ref")).strip() or "—"),
+                    _e(_text(source.get("tier")).strip() or "—"),
+                    _verified_badge(source) if source else '<span class="muted">—</span>',
+                    _e(note) if note else '<span class="muted">—</span>',
+                ])
     for index, question in enumerate(questions):
         question_id = _question_id(question, index)
         for option_index, option in enumerate(_options(question)):
@@ -2412,15 +3176,16 @@ def _render_sources(questions: list[dict]) -> str:
             ])
     if not rows:
         body = '<div class="empty">暂无来源登记（所有候选都没有 source_ref）。</div>'
-        return _section("07", "sources", "来源速查", body, hint="默认折叠")
+        return _section(number, "sources", "来源速查", body, hint="默认折叠")
     table = _table(
         ["小问", "方案", "来源类型", "编号", "tier", "核验", "备注"],
         rows,
         caption="所有候选的来源汇总",
     )
+    count_text = f"{len(rows)} 个候选" if not gate else f"{len(rows)} 项"
     body = (
         "<details><summary>展开："
-        f"{len(rows)} 个候选的来源类型、编号、tier 与核验状态"
+        f"{count_text}的来源类型、编号、tier 与核验状态"
         "（默认折叠，避免淹没正文）</summary>"
         f'<div class="inner">{table}'
         '<p class="muted" style="font-size:12.5px;margin-top:10px">'
@@ -2428,7 +3193,7 @@ def _render_sources(questions: list[dict]) -> str:
         "未核验（verified=false）的方案在正文里会额外标红，不能当作已查证依据。</p>"
         "</div></details>"
     )
-    return _section("07", "sources", "来源速查", body, hint="默认折叠")
+    return _section(number, "sources", "来源速查", body, hint="默认折叠")
 
 
 # ---------------------------------------------------------------------------
@@ -2458,7 +3223,7 @@ def _change_text(change: dict) -> str:
     return path
 
 
-def _render_meta(board: dict) -> str:
+def _render_meta(board: dict, number: str = "08") -> str:
     """08 板信息与轮次历史（折叠）：把唯一真实来源的关键字段摊开备查。"""
     hash_value = _text(board.get("board_sha256")).strip()
     if not hash_value:
@@ -2520,7 +3285,7 @@ def _render_meta(board: dict) -> str:
 
     inner = f'<dl class="kv kv-wide">{"".join(rows)}</dl><div style="margin-top:16px">{history_html}</div>'
     return _section(
-        "08",
+        number,
         "meta",
         "决策板元信息与轮次历史",
         f"<details><summary>展开：唯一真实来源的关键字段与每轮回执摘要</summary>"
@@ -2529,7 +3294,12 @@ def _render_meta(board: dict) -> str:
     )
 
 
-def _render_submit_panel(board: dict, questions: list[dict]) -> str:
+def _render_submit_panel(
+    board: dict,
+    questions: list[dict],
+    number: str = "09",
+    gate: str | None = None,
+) -> str:
     """决策提交区：每题一组单选项 + 批注框 + 提交按钮。
 
     页面在两种环境下都能用：
@@ -2562,10 +3332,17 @@ def _render_submit_panel(board: dict, questions: list[dict]) -> str:
             oid = _text(option.get("id")).strip() or f"O{pos + 1}"
             name = _text(option.get("name")).strip() or oid
             tier = _text(option.get("tier")).strip().lower()
-            tier_short = TIER_SHORT.get(tier, "")
+            verdict = _verdict_key(option)
+            tier_short = TIER_SHORT.get(tier, "") or {
+                "recommended": "建议",
+                "not_recommended": "不建议",
+            }.get(verdict, "")
             checked = " checked" if oid == current else ""
             on_class = " on" if oid == current else ""
             tier_html = f'<span class="sp-tier">{_e(tier_short)}</span>' if tier_short else ""
+            score = _score_of(option)
+            if isinstance(score, (int, float)) and not isinstance(score, bool):
+                tier_html += f'<span class="sp-tier mono">{_e(_num_text(float(score)))}</span>'
             radios.append(
                 f'<label class="sp-opt{on_class}" data-option="{_e(oid)}">'
                 f'<input type="radio" name="mm-{_e(qid)}" value="{_e(oid)}"{checked}>'
@@ -2587,6 +3364,18 @@ def _render_submit_panel(board: dict, questions: list[dict]) -> str:
         )
 
     if not blocks:
+        if gate == "a":
+            # A 板 schema v2 允许 options 为空：这时页面上没有可选项，
+            # 但要把"范式集合在哪里确认"说清楚，避免以为页面坏了。
+            return _section(
+                number,
+                "submit",
+                "你的决策（范式集合）",
+                '<div class="empty">本板没有模型候选项（A 闸门不选型）：'
+                "要确认的是 paradigm_set 里勾选的范式子集（paradigm_selection）。"
+                "请在终端核对后运行 confirm；若你要增删范式，改 JSON 后重新 render 再确认。</div>",
+                hint="A 闸门只确认框架与范式",
+            )
         return ""
 
     confirmed_note = (
@@ -2598,7 +3387,7 @@ def _render_submit_panel(board: dict, questions: list[dict]) -> str:
     )
 
     return _section(
-        "09",
+        number,
         "submit",
         "你的决策（在页面上直接选）",
         f'<div class="submit-panel" data-board-id="{_e(board_id)}"'
@@ -2681,7 +3470,23 @@ def _self_check(markup: str) -> None:
         )
 
 
-def render_html(board: dict, *, title: str | None = None) -> str:
+def _nav_for(gate: str, board: dict, questions: list[dict]) -> tuple[tuple[str, str], ...]:
+    """按闸门给出导航锚点（只列真正会渲染出来的小节）。"""
+    if gate == "b":
+        nav = list(NAV_LINKS_GATE_B)
+        if _text(_as_dict(board.get("mindmap")).get("source")).strip():
+            nav.insert(1, ("map", "导图"))
+        return tuple(nav)
+    return NAV_LINKS_GATE_A
+
+
+def render_html(
+    board: dict,
+    *,
+    title: str | None = None,
+    gate: str | None = None,
+    submission_name: str | None = None,
+) -> str:
     """把 design_board 渲染成单文件 HTML 字符串（含 ``<!DOCTYPE html>`` 与内联 ``<style>``）。
 
     参数
@@ -2709,9 +3514,18 @@ def render_html(board: dict, *, title: str | None = None) -> str:
     view = dict(board)
     view["rendered_at"] = _render_time(board)
 
+    mode = _resolve_gate(view, gate)
     questions = _questions(view)
     page_title = _page_title(view, title)
     document_title = page_title if "决策板" in page_title else f"{page_title} · 建模方案决策板"
+    if mode:
+        document_title = f"{document_title}（{GATE_LABELS.get(mode, mode)}）"
+    nav = _nav_for(mode, view, questions) if mode else NAV_LINKS
+    css = _CSS + (_GATE_CSS if mode else "")
+    script = _INLINE_SCRIPT.replace(
+        "__MM_SUBMISSION_FILE__",
+        submission_name or "design_board_submission.json",
+    ).replace("__MM_GATE_ARG__", _gate_suffix(mode))
 
     head = (
         "<!DOCTYPE html>\n"
@@ -2720,17 +3534,59 @@ def render_html(board: dict, *, title: str | None = None) -> str:
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{_e(document_title)}</title>\n"
-        f"<style>{_CSS}</style>\n"
+        f"<style>{css}</style>\n"
         "</head>"
     )
-    body = "\n".join(
-        [
-            '<body id="top">',
-            '<a class="skip" href="#main">跳到正文</a>',
-            _render_topbar(view),
-            '<main id="main" class="wrap">',
-            _render_hero(view, page_title),
-            _render_confirm(view),
+    counter = iter(range(1, 100))
+
+    def num() -> str:
+        """小节编号（按渲染顺序自增，插入新节时不必手改后续编号）。"""
+        return f"{next(counter):02d}"
+
+    if mode == "b":
+        sections: list[str] = [_render_overview(view, questions, number=num(), gate="b")]
+        if _text(_as_dict(view.get("mindmap")).get("source")).strip():
+            sections.append(
+                _section(
+                    num(),
+                    "map",
+                    "模型结构总览",
+                    _render_mindmap(view),
+                    hint="题目 → 小问 → 候选 → 验证",
+                )
+            )
+        sections.extend([
+            _render_advice(view, questions, number=num()),
+            _render_data_comparison(view, questions, number=num()),
+            _render_compare(view, questions, number=num(), gate="b"),
+            _render_locked(questions, number=num(), gate="b"),
+            _render_ambiguities(view, number=num()),
+            _render_sources(questions, number=num()),
+            _render_meta(view, number=num()),
+            _render_submit_panel(view, questions, number=num(), gate="b"),
+        ])
+    elif mode == "a":
+        sections = [
+            _render_overview(view, questions, number=num(), gate="a"),
+            _section(
+                num(),
+                "map",
+                "模型结构总览",
+                _render_mindmap(view),
+                hint="题目 → 小问 → 范式 → 候选 → 验证",
+            ),
+            _render_paradigm(view, questions, number=num()),
+            _render_options(view, questions, number=num(), gate="a"),
+            _render_compare(view, questions, number=num(), gate="a"),
+            _render_locked(questions, number=num(), gate="a"),
+            _render_ambiguities(view, number=num()),
+            _render_sources(questions, number=num(), gate="a"),
+            _render_meta(view, number=num()),
+            _render_submit_panel(view, questions, number=num(), gate="a"),
+        ]
+    else:
+        # legacy 版式：与改造前逐字节一致（样例 design-board-sample 是回归锚）
+        sections = [
             _render_overview(view, questions),
             _section(
                 "02",
@@ -2740,15 +3596,26 @@ def render_html(board: dict, *, title: str | None = None) -> str:
                 hint="题目 → 小问 → 候选 → 验证",
             ),
             _render_options(view, questions),
-            _render_compare(questions),
+            _render_compare(view, questions),
             _render_locked(questions),
             _render_ambiguities(view),
             _render_sources(questions),
             _render_meta(view),
             _render_submit_panel(view, questions),
+        ]
+
+    body = "\n".join(
+        [
+            '<body id="top">',
+            '<a class="skip" href="#main">跳到正文</a>',
+            _render_topbar(view, mode),
+            '<main id="main" class="wrap">',
+            _render_hero(view, page_title, gate=mode, nav=nav),
+            _render_confirm(view, mode),
+            *sections,
             _render_footer(),
             "</main>",
-            f"<script>{_INLINE_SCRIPT}</script>",
+            f"<script>{script}</script>",
             "</body>",
             "</html>",
             "",

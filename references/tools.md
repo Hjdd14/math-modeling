@@ -130,7 +130,26 @@ python "tools/design_board.py" confirm --workspace "."
 python "tools/design_board.py" confirm --workspace "." --apply
 python "tools/design_board.py" confirm --workspace "." --apply --skip-interactive --reason "用户要求跳过"
 python "tools/design_board.py" serve --workspace "." [--port 8765] [--no-browser] [--once]
+# 双闸门：所有子命令都支持 --gate a|b（默认 a）与 --board <path>（显式指定主数据文件）
+python "tools/design_board.py" render  --gate b --workspace "." --format all
+python "tools/design_board.py" serve   --gate b --workspace "."
+python "tools/design_board.py" ingest  --gate b --workspace "." --from design_choices_gate_b.xlsx
+python "tools/design_board.py" status  --gate b --workspace "."
+python "tools/design_board.py" confirm --gate b --workspace "." --apply
 ```
+
+`--gate` 决定四件套路径（全部相对 `--workspace`）：
+
+| 产物 | `--gate a`（框架/范式） | `--gate b`（方案择定） |
+|---|---|---|
+| 主数据 | `design_board.json` | `design_board_gate_b.json` |
+| Markdown | `design_board.md` | `design_board_gate_b.md` |
+| HTML | `design_board.html` | `design_board_gate_b.html` |
+| 选择表 | `design_choices.xlsx` | `design_choices_gate_b.xlsx` |
+| 回执目录 | `design_rounds/` | `design_rounds_gate_b/` |
+| 离线提交 | `design_board_submission.json` | `design_board_gate_b_submission.json` |
+
+两板的 `board_sha256`、确认码、回执与非 TTY 检查各自独立。分支形态下 B 板放在 `questions/qN/`，用 `--workspace questions/qN --gate b` 即可，命令不变。
 
 决策板工具，主流程零第三方依赖。`render` 计算 `board_sha256` 与 4 位确认码并写回 JSON；`ingest` 读取用户提交并生成 `design_rounds/round_NNN.json`，自动维护 `no_change_rounds`；`status` 输出收敛进度与 `ready_to_confirm`；`confirm` 默认 dry-run，`--apply` 时要求输入视图上的 4 位确认码（环境变量 `MM_CONFIRM_CODE` 供 CI 使用，此时 `confirmed_by: "ci"`）。
 
@@ -223,12 +242,40 @@ python "tools/design_board_checker.py" --workspace "." --mode excellence --skip-
 python "tools/design_board_checker.py" --workspace "." --mode excellence --allow-legacy
 ```
 
-检查 `design_board.json` 的结构、确认状态、`board_sha256` 一致性、`design_rounds/` 轮次完整性与确认来源；并做两类额外校验：
+检查决策板的结构、确认状态、`board_sha256` 一致性、回执完整性与确认来源。新增 `--gate a|b`（默认 a）与 `--board <path>`。
 
-1. **交叉校验（方案 C）**：把板的 `user_choice` 对应 option 名与审计的 `final_selection.name` 对账，并要求板的候选名与 `model_selection_audit.json` 的 `candidates[].name` 至少有一对能匹配（归一化后双向包含）。失败码：`board_audit_missing`、`board_audit_selection_mismatch`、`board_audit_candidate_mismatch`。加 `--no-cross-audit` 可跳过。
-2. **时间线校验**：`solution.py` / `solution_tests.py` / `results/` 下代码与结果文件的 mtime 不得早于 `confirmed_at`（容差 5 秒），防止"先写代码后补板"。失败码 `code_written_before_confirm`。夹具目录（`tests/test_data`、`examples/solved-python`、`examples/design-board-sample`）自动豁免，或加 `--skip-timeline` 跳过。
+**A 组（`--gate a`）**：每题 `paradigm_set` 3–5 项、结构完整、至少 1 个异质 `family`；`paradigm_selection` ≥2 且覆盖 ≥2 个族；`user_locked` 必须 false（`gate_a_user_locked_forbidden`）；`options` 允许为空（`insufficient_options` 只在没有 `paradigm_set` 的老板上生效）；`mini_trial` 由必填改为**可选**；A 组跳过候选对账，只报 `paradigm_audit_pending`（warning）。
 
-关键字段：`passed`、`warning`、`confirmed`、`cross_audit`（`checked`/`skipped`/`not_applicable`）、`timeline`（`checked`/`skipped`）、`checks`、`issues`。
+**B 组（`--gate b`）**：
+
+- `advice_*`：`advice_missing`、`advice_candidates_count`(5–8)、`advice_one_recommended`、`advice_scores_complete`、`advice_pros_cons`、`advice_why_not_when_better`、`advice_data_comparison`(≥2 slice × 全候选)、`advice_comparable_metrics`、`advice_trials_ref_valid`、`advice_number_mismatch`、`advice_board_mismatch`、`advice_is_not_judge_panel`、`advice_no_judge_wording`、`advice_option_mismatch`；
+- `trials_*`：`trials_missing`、`trials_slices_insufficient`、`trials_perspectives_insufficient`、`trials_slice_coverage`、`trials_not_tool_executed`（手填）、`trials_metric_keys_mismatch`、`trials_field_missing`；
+- 用户选择：`user_choice_present`、`choice_in_options`（`invalid_user_choice`）、`preauthorized_not_attested`（excellence 下 error）；
+- 交叉校验：B 板 `user_choice` ↔ `model_selection_audit.json` 的 `final_selection.name`，候选名至少一对能匹配（归一化后双向包含）。失败码同旧：`board_audit_missing`、`board_audit_selection_mismatch`、`board_audit_candidate_mismatch`。加 `--no-cross-audit` 可跳过。
+
+**双时间线**：`--gate a` 比 A 板 `confirmed_at`（`code_written_before_gate_a`；schema<2 旧板仍报 `code_written_before_confirm`）；`--gate b` 比 B 板 `confirmed_at`（`code_written_before_gate_b`）。`perspective_trials/**` 不计入。**板缺失 + 已有交付代码 → error，不再 skipped。** 夹具目录（`tests/test_data`、`examples/solved-python`、`examples/design-board-sample`）仍自动豁免，或 `--skip-timeline` 跳过。
+
+关键字段：`passed`、`warning`、`confirmed`、`gate`、`path`、`cross_audit`（`checked`/`skipped`/`not_applicable`/`framework_only`）、`timeline`（`checked`/`skipped`）、`checks`、`issues`。
+
+## perspective_trial_runner.py
+
+```bash
+python "tools/perspective_trial_runner.py" open   --workspace "." --slices slices.json [--axis data_rows|parameter|scenario] [--note "..."]
+python "tools/perspective_trial_runner.py" run    --workspace "." --perspective statistician --option-id O1 --slice full [--cmd "..."]
+python "tools/perspective_trial_runner.py" status --workspace "."
+python "tools/perspective_trial_runner.py" verify --workspace "."
+```
+
+B 闸门的**唯一**试算写入口：真跑 `perspective_trials/<perspective>.py`，计时、捕获 stdout/stderr、记录 `executed_by: "tool"` / `exit_code` / `runtime_s` / `stdout_sha256` / `script_sha256` / `captured_at`，追加写 `perspective_trials.json`（同 `(perspective, slice)` 用 `run_seq` 区分，不覆盖旧记录）。`status` 输出覆盖矩阵（缺哪格、哪些 run 失败），`verify` 重算脚本哈希并把"改了脚本没重跑"的 run 标 `stale`。脚本必须在 stdout 打印一个 JSON 对象作为 metrics；解析失败照样留痕并返回非 0。
+
+## model_advice_builder.py
+
+```bash
+python "tools/model_advice_builder.py" assemble --workspace "." [--trials perspective_trials.json]
+python "tools/model_advice_builder.py" validate --workspace "." --mode excellence
+```
+
+把"1 建议 + 其余不建议 + 打分 + 多组数据对比"变成可校验结构：`assemble` 从 `perspective_trials.json` 与 `agent_outputs/revised_*.json` 生成 `model_advice.json` 骨架（候选 id/name/own 指标/对比行全部由工具回填，Agent 只填分数、优缺点、推荐）；`validate` 逐条实现 B 组规则并核对数值与 trials 一致（`advice_number_mismatch`）。不联网、不调用 LLM。
 
 ## model_selection_checker.py
 
@@ -458,7 +505,11 @@ python "tools/pipeline_check.py" --workspace "." --language python
 python "tools/pipeline_check.py" --workspace "." --language python --evidence-mode strict
 python "tools/pipeline_check.py" --workspace "." --language python --evidence-mode strict --quality-mode excellence
 python "tools/pipeline_check.py" --workspace "." --language python --evidence-mode strict --quality-mode excellence --online-source-materials
+# 分支形态：小问工作区需要 --board-root 指回根工作区才能找到 A 板
+python "tools/pipeline_check.py" --workspace "questions/q1" --language python --stage question --board-root "."
 ```
+
+`--stage final` 会**依次**跑 `design_board_checker --gate a` 与 `--gate b`：A 板 schema v2 且缺 B 板 → error；`model_advice.json` / `perspective_trials.json` 不达标 → error；legacy 板（schema<2）缺 B 板只 warning。分支新增 `--stage question` 与 `--board-root`（默认从 workspace 向上 5 层查找 `design_board.json`）。
 
 总控验证会串联代码运行、图表、brief 核查、evidence check、来源总索引、离线来源新鲜度、案例检索、奖项级上限产物、模型选择、优化证书、不确定性预算、题型验证 profile、数据泄漏、统计验证、质量闭环产物、writer prompt、创新筛选、评委组审查和合规检查，并对 `model_decision.md` 中的 LaTeX 公式做提示性检查（`latex_advisory`，只产出 warning，永不翻转 `passed`；需要判失败请单独运行 `tools/latex_validator.py`）。加 `--online-source-materials` 时额外运行资料内容读取联网深扫。新正式流程不把正式写作正文作为必需产物。`passed == false` 时必须修正后重跑。
 

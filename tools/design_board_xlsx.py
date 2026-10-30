@@ -32,6 +32,9 @@ SHEET_SCORES = "03_打分"
 SHEET_SOURCES = "04_来源"
 SHEET_COMMENTS = "05_批注"
 SHEET_README = "06_说明"
+#: B 闸门多一张数据对比表（可比层 + 专属层 + baseline 参照行），说明表顺延为 07。
+SHEET_DATA = "06_数据对比"
+SHEET_README_GATE_B = "07_说明"
 TIER_LABELS = {"recommended": "🟢 推荐", "alternative": "⚪ 备选", "rejected": "⛔ 不推荐"}
 WEIGHT_DIMENSIONS = [
     ("problem_fit", "问题契合"), ("interpretability", "可解释性"), ("computability", "可计算性"),
@@ -59,9 +62,65 @@ if HAS_OPENPYXL:
     BODY_FONT, BOLD_FONT = Font(size=10), Font(size=10, bold=True)
     WARN_FONT, BODY_ALIGN = Font(size=10, color=WARN), Alignment(wrap_text=True, vertical="top")
 
-def render_xlsx(board: dict, path) -> str:
-    """渲染 design_board 为 7 工作表 xlsx，返回 str(path)。"""
+def _resolve_gate(board: dict, gate: str | None) -> str:
+    """渲染用闸门：板自报优先，其次显式参数，兜底为 A（旧板=legacy A 版式）。"""
+    declared = board.get("gate")
+    if isinstance(declared, str) and declared.strip().lower() in ("a", "b"):
+        return declared.strip().lower()
+    if isinstance(gate, str) and gate.strip().lower() == "b":
+        return "b"
+    return "a"
+
+
+def _verdict_text(option: dict, candidate: dict) -> str:
+    """B 板的建议结论（中文），与 HTML 视图同一口径。"""
+    raw = str(option.get("verdict") or candidate.get("verdict") or "").strip().lower()
+    if raw in ("recommended", "recommend"):
+        return "🟢 建议采用"
+    if raw in ("not_recommended", "not-recommended", "rejected", "reject"):
+        return "⛔ 不建议"
+    return "⚪ 未表态"
+
+
+def _advice_of(board: dict, question: dict) -> dict:
+    """某题的建议块：题内 advice 优先，其次板级 advice。"""
+    advice = question.get("advice")
+    if isinstance(advice, dict) and advice:
+        return advice
+    board_advice = board.get("advice")
+    return board_advice if isinstance(board_advice, dict) else {}
+
+
+def _candidate_index(advice: dict) -> dict[str, dict]:
+    """advice.candidates 按 option_id 建索引。"""
+    index: dict[str, dict] = {}
+    for item in advice.get("candidates") or []:
+        if isinstance(item, dict):
+            option_id = _text(item.get("option_id") or item.get("id")).strip()
+            if option_id:
+                index[option_id] = item
+    return index
+
+
+def _reason_text(option: dict, candidate: dict) -> str:
+    """一句话理由：建议项取 pros[0]，不建议项取 why_not[0]。"""
+    verdict = str(option.get("verdict") or candidate.get("verdict") or "").strip().lower()
+    key = "pros" if verdict in ("recommended", "recommend") else "why_not"
+    for item in candidate.get(key) or []:
+        text = _text(item).strip()
+        if text:
+            return text
+    return ""
+
+
+def render_xlsx(board: dict, path, *, gate: str | None = None) -> str:
+    """渲染 design_board 为 xlsx，返回 str(path)。
+
+    A 板保持改造前的 7 张工作表与列序（回归锚）；B 板追加候选分数列与
+    「06_数据对比」表，说明表顺延为 07_说明。
+    """
     _require_openpyxl()
+    mode = _resolve_gate(board, gate)
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     questions = [q for q in board.get("questions") or [] if isinstance(q, dict)]
@@ -69,12 +128,16 @@ def render_xlsx(board: dict, path) -> str:
     wb = Workbook()
     wb.remove(wb.active)
     _overview(wb.create_sheet(SHEET_OVERVIEW), board, questions, now_text)
-    _decide(wb.create_sheet(SHEET_DECIDE), questions)
+    _decide(wb.create_sheet(SHEET_DECIDE), questions, board=board, gate=mode)
     _weights(wb.create_sheet(SHEET_WEIGHTS))
     _scores(wb.create_sheet(SHEET_SCORES), questions)
     _sources(wb.create_sheet(SHEET_SOURCES), questions)
     _comments(wb.create_sheet(SHEET_COMMENTS), questions)
-    _readme(wb.create_sheet(SHEET_README))
+    if mode == "b":
+        _data_comparison(wb.create_sheet(SHEET_DATA), board, questions)
+        _readme(wb.create_sheet(SHEET_README_GATE_B), gate=mode, filename=target.name)
+    else:
+        _readme(wb.create_sheet(SHEET_README))
     wb.active = 0
     wb.save(target)
     return str(target)
@@ -129,35 +192,115 @@ def _overview(ws, board: dict, questions: list[dict], now_text: str) -> None:
     ws.cell(row=row, column=1).font = BOLD_FONT
     _autofit(ws)
 
-def _decide(ws, questions: list[dict]) -> None:
-    """01_待决策：黄底可编辑，仅 J、K 列解锁。"""
-    headers = ["题号", "目标", "选项ID", "选项名", "推荐度", "一句话理由", "复杂度", "主要风险", "试算结果", "当前选择", "批注"]
+def _decide(ws, questions: list[dict], *, board: dict | None = None, gate: str = "a") -> None:
+    """01_待决策：黄底可编辑，只有「当前选择」「批注」两列解锁。
+
+    A 板列序与改造前逐字一致；B 板把「推荐度/理由/复杂度/风险/试算」换成
+    「建议/总分/范式/来源视角/推荐或不建议理由」，其余保持同构，回读逻辑不变。
+    """
+    if gate == "b":
+        headers = [
+            "题号", "目标", "选项ID", "选项名", "建议", "总分", "范式", "来源视角",
+            "推荐或不建议理由", "当前选择", "批注",
+        ]
+    else:
+        headers = [
+            "题号", "目标", "选项ID", "选项名", "推荐度", "一句话理由", "复杂度",
+            "主要风险", "试算结果", "当前选择", "批注",
+        ]
     _header_row(ws, 1, headers)
+    choice_col = headers.index("当前选择") + 1
+    comment_col = headers.index("批注") + 1
+    verdict_col = headers.index("建议" if gate == "b" else "推荐度") + 1
     row, option_ids = 2, []
     for question in questions:
         qid, first = _text(question.get("id")), row
         choice, comment = _text(question.get("user_choice")), _text(question.get("user_comment"))
+        advice = _advice_of(board or {}, question)
+        candidates = _candidate_index(advice)
         for option in [o for o in question.get("options") or [] if isinstance(o, dict)]:
             oid, tier = _text(option.get("id")), _text(option.get("tier"))
             if oid and oid not in option_ids: option_ids.append(oid)
-            _write_row(ws, row, [
-                qid, _text(question.get("goal")), oid, _text(option.get("name")), TIER_LABELS.get(tier, tier or "—"),
-                _text(option.get("rationale")), _text(option.get("complexity")), _text(option.get("risk")),
-                _trial_text(option), choice if row == first else "", comment if row == first else "",
-            ], editable=(10, 11))
-            if tier == "recommended": ws.cell(row=row, column=5).fill = FILL_GOOD
-            elif tier == "rejected": ws.cell(row=row, column=5).font = WARN_FONT
+            candidate = candidates.get(oid, {})
+            if gate == "b":
+                score = option.get("score") if option.get("score") is not None else candidate.get("score")
+                values = [
+                    qid, _text(question.get("goal")), oid, _text(option.get("name")),
+                    _verdict_text(option, candidate),
+                    float(score) if isinstance(score, (int, float)) and not isinstance(score, bool) else None,
+                    _text(candidate.get("paradigm_id") or option.get("paradigm_id")),
+                    _text(candidate.get("origin") or option.get("origin")),
+                    _reason_text(option, candidate),
+                    choice if row == first else "", comment if row == first else "",
+                ]
+            else:
+                values = [
+                    qid, _text(question.get("goal")), oid, _text(option.get("name")),
+                    TIER_LABELS.get(tier, tier or "—"),
+                    _text(option.get("rationale")), _text(option.get("complexity")), _text(option.get("risk")),
+                    _trial_text(option), choice if row == first else "", comment if row == first else "",
+                ]
+            _write_row(ws, row, values, editable=(choice_col, comment_col))
+            verdict = str(option.get("verdict") or "").strip().lower() if gate == "b" else tier
+            if verdict in ("recommended", "recommend"):
+                ws.cell(row=row, column=verdict_col).fill = FILL_GOOD
+            elif verdict in ("rejected", "not_recommended", "not-recommended"):
+                ws.cell(row=row, column=verdict_col).font = WARN_FONT
             row += 1
     last, formula = row - 1, '"' + ",".join(option_ids) + '"'
     if option_ids and last >= 2 and len(formula) <= 255:
         dv = DataValidation(type="list", formula1=formula, allow_blank=False)
         dv.promptTitle, dv.prompt = "当前选择", "从下拉列表选择本题最终采用的选项ID"
         dv.errorTitle, dv.error = "选项ID 不合法", "请从下拉列表里选择本题的选项ID"
-        dv.add(f"J2:J{last}")
+        dv.add(f"{get_column_letter(choice_col)}2:{get_column_letter(choice_col)}{last}")
         ws.add_data_validation(dv)
     ws.freeze_panes = "C2"
     ws.sheet_view.showGridLines = False
     ws.protection.sheet = True
+    _autofit(ws)
+
+
+def _data_comparison(ws, board: dict, questions: list[dict]) -> None:
+    """06_数据对比（B 板）：每个 slice 一组行，可比层可横比，专属层单列，baseline 收尾。"""
+    rows: list[list] = []
+    columns: list[str] = []
+    for question in questions:
+        advice = _advice_of(board, question)
+        comparison = advice.get("data_comparison") if isinstance(advice.get("data_comparison"), dict) else {}
+        for name in comparison.get("comparable_columns") or []:
+            text = _text(name).strip()
+            if text and text not in columns:
+                columns.append(text)
+        rows.append((question, comparison))
+    headers = ["题号", "切片", "候选", "回溯", *columns, "专属指标（own）", "备注"]
+    _header_row(ws, 1, headers)
+    row = 2
+    for question, comparison in rows:
+        qid = _text(question.get("id"))
+        data_rows = [item for item in comparison.get("rows") or [] if isinstance(item, dict)]
+        baseline = comparison.get("baseline_row") if isinstance(comparison.get("baseline_row"), dict) else None
+        for item in data_rows:
+            comparable = item.get("comparable") if isinstance(item.get("comparable"), dict) else {}
+            own = item.get("own") if isinstance(item.get("own"), dict) else {}
+            _write_row(ws, row, [
+                qid, _text(item.get("slice_id")), _text(item.get("option_id")), _text(item.get("trials_ref")),
+                *[_text(comparable.get(column)) for column in columns],
+                "、".join(f"{key}={_text(value)}" for key, value in own.items()),
+                "",
+            ])
+            row += 1
+        if baseline:
+            comparable = baseline.get("comparable") if isinstance(baseline.get("comparable"), dict) else {}
+            _write_row(ws, row, [
+                qid, _text(baseline.get("slice_id")), _text(baseline.get("option_id")) or "baseline", "",
+                *[_text(comparable.get(column)) for column in columns],
+                "", "参照行（不占候选名额）",
+            ])
+            for col in range(1, len(headers) + 1):
+                ws.cell(row=row, column=col).font = BOLD_FONT
+            row += 1
+    if row == 2:
+        _write_row(ws, row, ["（本板没有 data_comparison：先跑 perspective_trial_runner 再生成建议）"])
     _autofit(ws)
 
 def _weights(ws) -> None:
@@ -237,19 +380,30 @@ def _comments(ws, questions: list[dict]) -> None:
         row += 1
     _autofit(ws)
 
-def _readme(ws) -> None:
-    """06_说明：A 列 9 行纯文本。"""
+def _readme(ws, *, gate: str = "a", filename: str = "design_choices.xlsx") -> None:
+    """说明表：A 板 06_说明（9 行），B 板 07_说明（多一段闸门与文件名说明）。"""
+    command = (
+        f"python tools/design_board.py ingest --workspace . --gate b --from {filename}"
+        if gate == "b"
+        else f"python tools/design_board.py ingest --workspace . --from {filename}"
+    )
     lines = [
         "xlsx 决策板使用说明",
         "1) 怎么用：00_总览 看整体结论；01_待决策 逐题确认当前选择；02_权重、03_打分 可调权重与打分并看加权总分。",
         "2) 哪些格子能改：只有黄底可改（01 的 J/K 列、02 的权重 B2:B8、03 的 D:J 分数、05 的 C 列批注）；灰底只读，01 已加保护。",
-        "3) 改完怎么交回：另存为 design_choices.xlsx，运行 python tools/design_board.py ingest --workspace . --from design_choices.xlsx",
+        f"3) 改完怎么交回：另存为 {filename}，运行 {command}",
         "4) 确认码含义：00_总览 A2 的 4 位确认码由决策板哈希派生，必须你本人在终端亲自输入，AI 不得代填或代为确认。",
         "5) 什么情况需重新确认：AI 改了候选方案内容（目标、选项、理由、风险、试算等）会让 board_sha256 变、确认码随之变，必须重新确认。",
         "6) 什么情况不需重新确认：你只改自己的选择或批注，hash 未变，改完保存交回即可，无需重新确认。",
         "7) 校验：02_权重 的合计应为 1（B9 不等于 1 会标红，请微调到恰好为 1）；03_打分 的 D:J 只能填 0-100 的整数。",
         "8) 回读：AI 用 read_submission_xlsx 解析本文件，改动会以 receipt_origin=xlsx-upload 记录并交给 ingest。",
     ]
+    if gate == "b":
+        lines.extend([
+            "9) 闸门说明：本表属于 B 闸门（方案择定），01_待决策 的「建议/总分/范式/来源视角」是建议 Agent 的结论，不是评委审查。",
+            "10) 数据对比：06_数据对比 的可比层（comparable）可以横向比较；专属指标（own）只在自己这个候选的不同切片之间可比；baseline 行是参照，不占候选名额。",
+            "11) 回执位置：B 板的回执写入 design_rounds_gate_b/，与 A 板的 design_rounds/ 互不干扰。",
+        ])
     for row, line in enumerate(lines, start=1):
         cell = ws.cell(row=row, column=1, value=line)
         cell.font, cell.fill, cell.border, cell.alignment = (BOLD_FONT if row == 1 else BODY_FONT), FILL_GREY, BORDER, BODY_ALIGN

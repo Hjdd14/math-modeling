@@ -2,9 +2,23 @@
 # -*- coding: utf-8 -*-
 """设计闸门宿主 hook（L5 防线）：写 solution 代码前检查决策板是否已确认。
 
-在 AI 通过宿主工具写入 ``solution.py`` / ``solution.m`` /
-``solution_tests.py`` / ``solution_tests.m`` 之前，向上查找目标文件所在
-工作区里的 ``design_board.json``；只有板已确认时才放行。
+双闸门语义（见 docs/DESIGN_GATE_PLAN.md 与施工契约 §8.6）：
+
+* **A 闸门**（框架与探索边界）：整题一块板 ``design_board.json``，只确认题意框架、
+  假设与待探索范式集合，不锁定模型选型。
+* **B 闸门**（方案择定）：``design_board_gate_b.json``。主仓库是整题一块板
+  （工作区根），分支是每问一块板（``questions/qN/``）。
+
+判定链（除第 1 条外都只对受保护交付代码生效）：
+
+1. 目标在 ``perspective_trials/`` 下 → 放行（试算代码是可跑证据，不是交付代码）；
+2. 目标在 ``questions/<qid>/`` 下 → 向上 ≤5 层找 ``design_board_gate_b.json``，
+   必须已确认（``questions[]`` 逐条 ``confirmed`` 全为 true）；找不到该板时
+   向上找 A 板：A 板 ``schema_version >= 2`` → 拒绝（提示先做 B 闸门），
+   否则按 legacy 放行并给出警告；
+3. 其余交付代码（工作区根 ``solution.*``）→ A 板必须已确认；A 板
+   ``schema_version >= 2`` 时还要求同级 ``design_board_gate_b.json`` 已确认；
+4. 其它目标不拦。
 
 用法::
 
@@ -47,6 +61,15 @@ PROTECTED_BASENAMES = frozenset(
 )
 
 BOARD_FILENAME = "design_board.json"
+
+# B 闸门（方案择定）的板文件名；与 A 板并存，互不覆盖。
+GATE_B_FILENAME = "design_board_gate_b.json"
+
+# 试算代码目录：perspective_trials/** 是可跑证据，不是交付代码，一律放行。
+TRIALS_DIRNAME = "perspective_trials"
+
+# 小问目录：分支仓库把 B 板放在 questions/qN/ 下（主仓库放在工作区根）。
+QUESTIONS_DIRNAME = "questions"
 
 # 从目标文件目录开始，最多向上找 5 层
 MAX_UPWARD_LEVELS = 5
@@ -378,12 +401,28 @@ def _resolve_target(target, base_dir):
     return os.path.normpath(os.path.join(os.path.abspath(base_dir), expanded))
 
 
-def _find_board_for(target_abs):
-    """从目标文件所在目录向上最多 5 层找 design_board.json。"""
-    start = target_abs if os.path.isdir(target_abs) else os.path.dirname(target_abs)
-    current = start
+def _normalize_parts(path):
+    """把路径拆成非空段（Windows 反斜杠一并归一），便于识别 questions/<qid> 结构。"""
+    return [part for part in path.replace("\\", "/").split("/") if part]
+
+
+def _join_parts(parts):
+    """把 _normalize_parts 的段拼回路径；保留 Windows 盘符写法（C:\\...）。"""
+    if not parts:
+        return ""
+    head = parts[0]
+    if head.endswith(":") and len(head) == 2:
+        return head + os.sep + os.sep.join(parts[1:])
+    if len(parts) == 1:
+        return head
+    return os.sep.join(parts)
+
+
+def _find_named_file_upward(start_dir, filename):
+    """从 start_dir 开始向上最多 5 层查找指定文件名；找不到返回 None。"""
+    current = start_dir or os.getcwd()
     for _ in range(MAX_UPWARD_LEVELS + 1):
-        candidate = os.path.join(current, BOARD_FILENAME)
+        candidate = os.path.join(current, filename)
         if os.path.isfile(candidate):
             return candidate
         parent = os.path.dirname(current)
@@ -393,15 +432,27 @@ def _find_board_for(target_abs):
     return None
 
 
-def _board_is_confirmed(board_path):
-    """读取并判断 board 是否已确认。
+def _find_gate_b_for(directory):
+    """从指定目录向上最多 5 层找 design_board_gate_b.json（B 闸门）。"""
+    return _find_named_file_upward(directory, GATE_B_FILENAME)
+
+
+def _load_board(board_path):
+    """读取板文件；解析失败抛异常，由调用方决定 fail-closed。"""
+    with open(board_path, "r", encoding="utf-8-sig") as handle:
+        board = json.load(handle)
+    if not isinstance(board, dict):
+        raise ValueError("板文件顶层不是 JSON 对象: %s" % (board_path,))
+    return board
+
+
+def _board_is_confirmed_payload(board):
+    """判断板对象是否已确认。
 
     兼容两种写法（满足其一即可）：
     * 顶层 ``confirmed`` 为 true；
     * ``questions`` 非空，且每个 question 的 ``confirmed`` 都为 true。
     """
-    with open(board_path, "r", encoding="utf-8-sig") as handle:
-        board = json.load(handle)
     if not isinstance(board, dict):
         return False
     if board.get("confirmed") is True:
@@ -417,12 +468,151 @@ def _board_is_confirmed(board_path):
     return True
 
 
-def _deny_reason(display_path):
+def _board_schema_version(board):
+    """读取板结构版本；缺失或非法按 1（legacy）处理，与 checker 口径一致。"""
+    version = board.get("schema_version") if isinstance(board, dict) else None
+    if isinstance(version, int) and not isinstance(version, bool):
+        return version
+    return 1
+
+
+def _board_is_new_flow(board):
+    """``schema_version >= 2`` 即新流程：必须有 B 板，缺板不放行。"""
+    return _board_schema_version(board) >= 2
+
+
+def _is_trials_target(target_abs):
+    """目标是否位于 ``perspective_trials/`` 目录下（试算代码，非交付代码）。"""
+    parts = [part.lower() for part in _normalize_parts(target_abs)]
+    return TRIALS_DIRNAME in parts[:-1]
+
+
+def _question_dir(target_abs):
+    """若目标在 ``<...>/questions/<qid>/...`` 下，返回该 qid 目录；否则 None。"""
+    parts = _normalize_parts(target_abs)
+    lowered = [part.lower() for part in parts]
+    for index in range(len(parts) - 2):
+        if lowered[index] != QUESTIONS_DIRNAME:
+            continue
+        # 必须真的落在 qid 目录里面（至少还有 qid + 文件名两段）
+        if index + 2 > len(parts) - 1:
+            continue
+        return _join_parts(parts[: index + 2])
+    return None
+
+
+def _deny_reason_gate_a(display_path, workspace):
+    """A 闸门未通过的拒绝文案：两板命令都给，避免用户只补一半。"""
     return (
-        "设计闸门未通过：%s 所在工作区还没有已确认的 design_board.json。"
-        "请先运行 python tools/design_board.py render 并让用户本人执行 confirm --apply。"
-        % (display_path,)
+        "设计闸门未通过：%s 是交付代码，但它所在工作区还没有已确认的 design_board.json。\n"
+        "A 闸门（框架与探索边界）：\n"
+        "  python tools/design_board.py render --workspace %s\n"
+        "  python tools/design_board.py confirm --workspace %s --apply"
+        "   # 用户本人输入 4 位确认码\n"
+        "B 闸门（方案择定，A 板 schema_version >= 2 时必需）：\n"
+        "  python tools/design_board.py render --gate b --workspace %s\n"
+        "  python tools/design_board.py confirm --gate b --workspace %s --apply"
+        % (display_path, workspace, workspace, workspace, workspace)
     )
+
+
+def _deny_reason_gate_b(display_path, workspace, detail):
+    """B 闸门未通过的拒绝文案：先给 B 板四步命令，再附 A 板命令。"""
+    return (
+        "设计闸门未通过：%s 是交付代码，但 B 闸门（方案择定）还没有通过：%s\n"
+        "先完成 B 闸门（design_board_gate_b.json，确认码取该板 board_sha256[:4]）：\n"
+        "  python tools/design_board.py render --gate b --workspace %s\n"
+        "  python tools/design_board.py serve --gate b --workspace %s\n"
+        "  python tools/design_board.py ingest --gate b --workspace %s\n"
+        "  python tools/design_board.py confirm --gate b --workspace %s --apply"
+        "   # 用户本人输入 4 位确认码\n"
+        "A 闸门（框架与探索边界，design_board.json）：\n"
+        "  python tools/design_board.py render --workspace %s\n"
+        "  python tools/design_board.py confirm --workspace %s --apply"
+        % (display_path, detail, workspace, workspace, workspace, workspace, workspace, workspace)
+    )
+
+
+def _legacy_warning(workspace, scope):
+    return (
+        "%s 使用旧版 A 板（schema_version < 2 或 legacy_gate_a_only），按单闸门流程放行。"
+        "建议补做 B 闸门：python tools/design_board.py render --gate b --workspace %s，"
+        "再由用户本人执行 confirm --gate b --apply。"
+        % (scope, workspace)
+    )
+
+
+def _evaluate_question_target(target_abs, question_dir, warnings):
+    """``questions/<qid>/`` 下的交付代码：先看该问的 B 板，再看 A 板。"""
+    gate_b_path = _find_gate_b_for(question_dir)
+    if gate_b_path is not None:
+        workspace = os.path.dirname(gate_b_path)
+        board = _load_board(gate_b_path)
+        if _board_is_confirmed_payload(board):
+            return True, ""
+        return False, _deny_reason_gate_b(
+            target_abs,
+            workspace,
+            "该问的 design_board_gate_b.json 存在但未确认（questions[] 的 confirmed 必须全为 true）",
+        )
+
+    board_path = _find_named_file_upward(question_dir, BOARD_FILENAME)
+    if board_path is None:
+        return False, _deny_reason_gate_a(target_abs, question_dir)
+
+    workspace = os.path.dirname(board_path)
+    board = _load_board(board_path)
+    if _board_is_new_flow(board):
+        return False, _deny_reason_gate_b(
+            target_abs,
+            workspace,
+            "A 板已是 schema_version >= 2 的新流程，但该问还没有 design_board_gate_b.json",
+        )
+    if not _board_is_confirmed_payload(board):
+        return False, _deny_reason_gate_a(target_abs, workspace)
+
+    warnings.append(_legacy_warning(workspace, "questions/%s" % os.path.basename(question_dir)))
+    return True, ""
+
+
+def _evaluate_root_target(target_abs, warnings):
+    """工作区根（或其它位置）的交付代码：A 板必须确认，新流程还要同级 B 板。"""
+    start = target_abs if os.path.isdir(target_abs) else os.path.dirname(target_abs)
+    board_path = _find_named_file_upward(start, BOARD_FILENAME)
+    if board_path is None:
+        return False, _deny_reason_gate_a(target_abs, start)
+
+    workspace = os.path.dirname(board_path)
+    board = _load_board(board_path)
+    if not _board_is_confirmed_payload(board):
+        return False, _deny_reason_gate_a(target_abs, workspace)
+
+    if _board_is_new_flow(board):
+        gate_b_path = os.path.join(workspace, GATE_B_FILENAME)
+        if not os.path.isfile(gate_b_path):
+            return False, _deny_reason_gate_b(
+                target_abs,
+                workspace,
+                "A 板已是 schema_version >= 2 的新流程，但同级还没有 design_board_gate_b.json",
+            )
+        if not _board_is_confirmed_payload(_load_board(gate_b_path)):
+            return False, _deny_reason_gate_b(
+                target_abs, workspace, "design_board_gate_b.json 存在但未确认"
+            )
+        return True, ""
+
+    warnings.append(_legacy_warning(workspace, "工作区根"))
+    return True, ""
+
+
+def _evaluate_target(target_abs, warnings):
+    """判定单个受保护目标，返回 (是否放行, 拒绝文案)。"""
+    if _is_trials_target(target_abs):
+        return True, ""
+    question_dir = _question_dir(target_abs)
+    if question_dir is not None:
+        return _evaluate_question_target(target_abs, question_dir, warnings)
+    return _evaluate_root_target(target_abs, warnings)
 
 
 def _allow(style):
@@ -433,9 +623,13 @@ def _allow(style):
     return 0
 
 
-def _deny(display_path, style):
-    """拒绝。Cursor 用 exit 2 + stderr；Claude Code 用 JSON deny + exit 0。"""
-    reason = _deny_reason(display_path)
+def _deny(display_path, style, reason=None):
+    """拒绝。Cursor 用 exit 2 + stderr；Claude Code 用 JSON deny + exit 0。
+
+    ``reason`` 为空时退回 A 闸门文案（fail-closed 兜底路径用得上）。
+    """
+    if not reason:
+        reason = _deny_reason_gate_a(display_path, os.path.dirname(display_path))
     if style == "cursor":
         _warn("[design-gate] " + reason)
         return 2
@@ -481,11 +675,15 @@ def main():
 
     # 第二阶段：已经确定目标受保护。从这里开始任何异常都 fail-closed。
     try:
+        warnings = []
         for target in protected:
             target_abs = _resolve_target(target, base_dir)
-            board_path = _find_board_for(target_abs)
-            if board_path is None or not _board_is_confirmed(board_path):
-                return _deny(target_abs, style)
+            allowed, reason = _evaluate_target(target_abs, warnings)
+            if not allowed:
+                return _deny(target_abs, style, reason)
+        # 放行也要把"旧工作区单闸门兼容"的提醒说清楚，不能默默吃掉。
+        for message in warnings:
+            _warn("[design-gate] 警告：" + message)
         return _allow(style)
     except Exception as exc:
         _warn("[design-gate] hook error: %s" % (exc,))

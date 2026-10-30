@@ -3,6 +3,7 @@
 """数学建模交付物总控验证工具"""
 
 import argparse
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -80,6 +81,17 @@ DECISION_ARTIFACTS = ("final_solution.json", "model_decision.md")
 # 与其它 checker（case_retrieval_checker / writer_prompt_checker 等）保持一致：
 # standard 之外的严格模式缺证据一律判 error。
 STRICT_MODES = {"strict", "hard", "complete", "full", "excellence"}
+
+# 双闸门（A 框架闸门 / B 方案择定闸门）的板文件名，口径与 design_board_checker 一致。
+GATE_A_FILENAME = "design_board.json"
+GATE_B_FILENAME = "design_board_gate_b.json"
+
+# --stage 取值：主仓库只有 final（整题一次交付）。
+# 分支（每问一次交付）才需要 question + --board-root；主仓库保持同构的代码容错，
+# 但不把 question 暴露成 CLI 取值（它不是主仓库的特性）。
+STAGE_CHOICES = ("final",)
+DEFAULT_STAGE = "final"
+KNOWN_STAGES = ("final", "question")
 
 # Phase 5 固定产物清单，取自 references/workflow.md 的归档要求。
 # 仅用于生成 artifact_completeness 提示，不参与 passed 判定：
@@ -237,6 +249,288 @@ def _latex_advisory(model_decision: Path) -> dict:
     return result
 
 
+# ---------------------------------------------------------------------------
+# 双闸门（A 框架闸门 / B 方案择定闸门）
+# ---------------------------------------------------------------------------
+
+
+def _read_board_payload(path: Path) -> tuple[dict | None, str | None]:
+    """读板文件；缺失或非法都返回 (None, 原因)，不抛异常。"""
+    if not path.is_file():
+        return None, f"缺少 {path.name}"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - 统一转成结构化 issue
+        return None, f"{path.name} 不是合法 JSON: {exc}"
+    if not isinstance(payload, dict):
+        return None, f"{path.name} 顶层必须是 JSON 对象"
+    return payload, None
+
+
+def _board_schema_version(payload: dict) -> int:
+    """读板结构版本；缺失或非法按 1（legacy）处理，与 design_board_checker 同口径。"""
+    version = payload.get("schema_version")
+    if isinstance(version, int) and not isinstance(version, bool):
+        return version
+    return 1
+
+
+def _board_confirmed(payload: dict) -> bool:
+    """顶层 confirmed 为 true，或 questions[] 逐条 confirmed 全为 true，都算已确认。"""
+    if payload.get("confirmed") is True:
+        return True
+    questions = payload.get("questions")
+    if not isinstance(questions, list) or not questions:
+        return False
+    return all(
+        isinstance(item, dict) and item.get("confirmed") is True for item in questions
+    )
+
+
+def _choices_complete(payload: dict) -> tuple[bool, list[str]]:
+    """B 板每一问都必须有非空 user_choice，否则该问还没真的选定方案。"""
+    questions = payload.get("questions")
+    if not isinstance(questions, list) or not questions:
+        return False, []
+    missing: list[str] = []
+    for index, question in enumerate(questions):
+        if not isinstance(question, dict):
+            missing.append(f"questions[{index}]")
+            continue
+        choice = question.get("user_choice")
+        if not isinstance(choice, str) or not choice.strip():
+            missing.append(str(question.get("id") or f"questions[{index}]"))
+    return not missing, missing
+
+
+def _two_gate_stage(root: Path, quality_mode: str, stage: str = DEFAULT_STAGE) -> dict:
+    """双闸门总控：**只判跨板的硬门槛**，板内规则交给 design_board_checker。
+
+    分工（这条边界必须守住，两处各写一套同一规则必然会漂移）：
+
+    * A 板自身（范式集合、候选、时间线、回执来源……）→ ``check_design_board(gate="a")``；
+    * B 板自身（候选 5–8、恰好 1 个推荐、打分、advice 与 trials 的数值回溯……）
+      → ``check_design_board(gate="b")``；
+    * 本函数只回答一个问题：**A 板声明的新流程，B 板到位了没有。**
+
+    硬规则（契约 §2.3 / §8.5）：
+
+    * A 板 ``schema_version >= 2`` → B 板必须存在、已确认、每题都有 ``user_choice``，
+      缺一样都是 **error**（与 quality_mode 无关：A 板自己声明了新流程）；
+    * legacy A 板（``schema_version < 2``）缺 B 板 → **warning**，旧工作区照常通过；
+    * A 板缺失不在这里报：``design_board_checker`` 的 gate a 已经给了可读的失败码。
+
+    主仓库是整题一次交付，``stage`` 只有 final 有实际语义；question 仅为与分支 CLI
+    同构而在函数签名里容错，不改变这里的判定范围。
+    """
+    normalized_mode = (quality_mode or "standard").lower()
+    stage = (stage or DEFAULT_STAGE).lower()
+    if stage not in KNOWN_STAGES:
+        stage = DEFAULT_STAGE
+    strict = normalized_mode in STRICT_MODES
+
+    a_path = root / GATE_A_FILENAME
+    b_path = root / GATE_B_FILENAME
+    a_payload, a_error = _read_board_payload(a_path)
+    b_payload, b_error = _read_board_payload(b_path)
+
+    schema = _board_schema_version(a_payload) if a_payload is not None else None
+    new_flow = schema is not None and schema >= 2
+    a_confirmed = bool(a_payload) and _board_confirmed(a_payload)
+    b_confirmed = bool(b_payload) and _board_confirmed(b_payload)
+    choices_ok, missing_choices = _choices_complete(b_payload) if b_payload else (False, [])
+
+    issues: list[dict] = []
+    checks: list[dict] = []
+
+    if a_payload is None:
+        checks.append(
+            {
+                "name": "gate_a_board",
+                "passed": False,
+                "skipped": True,
+                "reason": a_error,
+                "note": "A 板缺失由 design_board_checker(--gate a) 报失败；这里不重复报码。",
+            }
+        )
+    else:
+        checks.append(
+            {
+                "name": "gate_a_board",
+                "passed": a_confirmed,
+                "schema_version": schema,
+                "new_flow": new_flow,
+                "confirmed": a_confirmed,
+            }
+        )
+
+    if b_path.is_file() and b_payload is None:
+        issues.append(
+            {
+                "code": "invalid_gate_b_board",
+                "severity": "error" if new_flow else "warning",
+                "message": f"B 板无法解析（{b_error}）；B 闸门必须先能读出板才谈得上确认。",
+                "file": GATE_B_FILENAME,
+            }
+        )
+    elif b_payload is None:
+        if new_flow:
+            issues.append(
+                {
+                    "code": "missing_gate_b_board",
+                    "severity": "error",
+                    "message": (
+                        f"A 板 schema_version={schema} 已是双闸门流程，但缺少 {GATE_B_FILENAME}；"
+                        "B 闸门（方案择定）确认前不得进入 Phase 2/3，尤其不得写交付代码。"
+                        "走完 B 板：python tools/design_board.py render --gate b → "
+                        "serve --gate b → ingest --gate b → confirm --gate b --apply。"
+                    ),
+                    "file": GATE_B_FILENAME,
+                }
+            )
+        else:
+            issues.append(
+                {
+                    "code": "gate_b_missing_legacy_workspace",
+                    "severity": "warning",
+                    "message": (
+                        "A 板是 legacy 板（schema_version < 2）且没有 B 板：按旧工作区放行（只警告）。"
+                        "建议补做 B 闸门，标记 legacy_gate_a_only 并走 confirm --gate b 后再继续写码。"
+                    ),
+                    "file": GATE_B_FILENAME,
+                }
+            )
+    else:
+        severity = "error" if new_flow else "warning"
+        if not b_confirmed:
+            issues.append(
+                {
+                    "code": "gate_b_not_confirmed",
+                    "severity": severity,
+                    "message": (
+                        f"{GATE_B_FILENAME} 尚未确认（顶层 confirmed 或 questions[] 逐条 confirmed "
+                        "必须为 true）；确认必须由用户本人在真实终端输入 B 板确认码。"
+                    ),
+                    "file": GATE_B_FILENAME,
+                }
+            )
+        if not choices_ok:
+            issues.append(
+                {
+                    "code": "gate_b_choice_missing",
+                    "severity": severity,
+                    "message": (
+                        "B 板还没有为全部小问选定方案（user_choice 为空）："
+                        "B 闸门的语义就是「每一问都有人拍板」，空选择等于没走闸门。"
+                    ),
+                    "file": GATE_B_FILENAME,
+                    "questions": missing_choices,
+                }
+            )
+
+    if b_payload is not None:
+        checks.append(
+            {
+                "name": "gate_b_board",
+                "passed": b_confirmed and choices_ok,
+                "confirmed": b_confirmed,
+                "choices_complete": choices_ok,
+                "missing_choices": missing_choices,
+                "questions": len(b_payload.get("questions") or []),
+            }
+        )
+    else:
+        checks.append(
+            {
+                "name": "gate_b_board",
+                "passed": False,
+                "present": b_path.is_file(),
+                "note": "B 板缺失的判定已在上面的 issues 里给出。",
+            }
+        )
+
+    return {
+        "workspace": str(root),
+        "mode": normalized_mode,
+        "stage": stage,
+        "passed": not any(issue["severity"] == "error" for issue in issues),
+        "warning": any(issue["severity"] == "warning" for issue in issues),
+        "strict": strict,
+        "gate_a": {
+            "path": str(a_path),
+            "present": a_payload is not None,
+            "schema_version": schema,
+            "new_flow": new_flow,
+            "confirmed": a_confirmed,
+        },
+        "gate_b": {
+            "path": str(b_path),
+            "present": b_payload is not None,
+            "confirmed": b_confirmed,
+            "choices_complete": choices_ok,
+            "questions": len(b_payload.get("questions") or []) if b_payload else 0,
+            "missing_choices": missing_choices,
+        },
+        "checks": checks,
+        "issues": issues,
+    }
+
+
+def _checker_parameters() -> set[str]:
+    """取 design_board_checker.check_design_board 的参数名，用于探测 --gate 支持。"""
+    try:
+        return set(inspect.signature(check_design_board).parameters)
+    except (TypeError, ValueError):  # pragma: no cover - 防御性分支
+        return set()
+
+
+def _design_board_gate_a(root: Path, quality_mode: str) -> dict:
+    """A 闸门（框架与探索边界）校验：直接委托 checker 的 gate="a"。"""
+    return check_design_board(str(root), quality_mode)
+
+
+def _design_board_gate_b(root: Path, quality_mode: str, stage: str = DEFAULT_STAGE) -> dict:
+    """B 闸门（方案择定）校验：委托 checker 的 gate="b"。
+
+    * B 板不在场时不在这里报错：缺板 + "已存在交付代码"的硬规则由
+      ``_two_gate_stage`` 统一给出，避免同一件事出现两条互相覆盖的 error；
+    * B 板在场时全量跑 B 组检查——候选 5–8、恰好 1 个推荐、打分完整性、
+      pros/cons、why_not+when_better、data_comparison 回溯、advice 与 trials 的
+      数值一致性（1e-9）、executed_by=tool 等，全部在 checker 内部完成。
+    """
+    stage = (stage or DEFAULT_STAGE).lower()
+    if stage not in KNOWN_STAGES:
+        stage = DEFAULT_STAGE
+    board = root / GATE_B_FILENAME
+    if not board.is_file():
+        return {
+            "workspace": str(root),
+            "mode": quality_mode,
+            "gate": "b",
+            "stage": stage,
+            "passed": True,
+            "warning": False,
+            "skipped": True,
+            "reason": "missing_gate_b_board",
+            "note": "B 板缺失的判定见 two_gate_stage；B 板在场时这里跑 B 组全量检查。",
+            "issues": [],
+        }
+    if "gate" not in _checker_parameters():
+        return {
+            "workspace": str(root),
+            "mode": quality_mode,
+            "gate": "b",
+            "stage": stage,
+            "passed": True,
+            "warning": False,
+            "skipped": True,
+            "reason": "checker_without_gate_support",
+            "note": "当前 design_board_checker 不认识 gate 参数，B 组检查未执行。",
+            "issues": [],
+        }
+    return check_design_board(str(root), quality_mode, gate="b")
+
+
 def run_checks(
     workspace: str,
     language: str = "python",
@@ -244,8 +538,12 @@ def run_checks(
     evidence_mode: str = "standard",
     quality_mode: str = "standard",
     online_source_materials: bool = False,
+    stage: str = DEFAULT_STAGE,
 ) -> dict:
     root = Path(workspace)
+    stage = (stage or DEFAULT_STAGE).lower()
+    if stage not in KNOWN_STAGES:
+        stage = DEFAULT_STAGE
     brief = root / "problem_brief.md"
     model_decision = root / "model_decision.md"
     code = root / ("solution.m" if language == "matlab" else "solution.py")
@@ -284,7 +582,10 @@ def run_checks(
         _safe("brief_output", checks, lambda: validate_against_brief(str(brief), "output", str(results_dir)))
 
     _safe("evidence_checker", checks, lambda: check_evidence(str(root), evidence_mode))
-    _safe("design_board_checker", checks, lambda: check_design_board(str(root), quality_mode))
+    # 双闸门：A 板（框架）与 B 板（方案择定）各自全量校验，跨板硬门槛由 two_gate_stage 判。
+    _safe("design_board_checker", checks, lambda: _design_board_gate_a(root, quality_mode))
+    _safe("design_board_gate_b", checks, lambda: _design_board_gate_b(root, quality_mode, stage))
+    _safe("two_gate_stage", checks, lambda: _two_gate_stage(root, quality_mode, stage))
     _safe("brief_completeness_checker", checks, lambda: check_brief_completeness(str(root), quality_mode))
     _safe("schema_checker", checks, lambda: check_schema(str(root), quality_mode))
     _safe("model_spec_checker", checks, lambda: check_model_spec(str(root), quality_mode))
@@ -338,6 +639,7 @@ def run_checks(
         "evidence_mode": evidence_mode,
         "quality_mode": quality_mode,
         "online_source_materials": online_source_materials,
+        "stage": stage,
         "passed": passed,
         "status": status,
         "warned_checks": warned,
@@ -368,6 +670,16 @@ def main():
         action="store_true",
         help="显式联网抽检竞赛资料内容；默认关闭，避免普通 CI 受外部网站波动影响。",
     )
+    parser.add_argument(
+        "--stage",
+        default=DEFAULT_STAGE,
+        choices=list(STAGE_CHOICES),
+        help=(
+            "final=整题一次交付的终验（主仓库唯一的语义）：A 板 schema v2 时必须有已确认的 "
+            "B 板，B 板在场时跑 B 组全量检查。按小问交付的 --stage question 属于分支特性，"
+            "主仓库不提供。"
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -378,6 +690,7 @@ def main():
             args.evidence_mode,
             args.quality_mode,
             args.online_source_materials,
+            args.stage,
         )
         output(result)
         sys.exit(0 if result["passed"] else 1)

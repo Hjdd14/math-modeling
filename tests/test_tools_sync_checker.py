@@ -116,3 +116,71 @@ def test_cli_json_out_and_quiet(tmp_path):
     assert payload["passed"] is True
     assert payload["mode"] == "default"
     assert payload["counts"]["identical"] == 1
+
+def test_design_board_renderers_are_declared_expected_differences(tmp_path):
+    """双闸门：design_board*.py 三件在两个仓库本就该不同，差异不得被判漂移。
+
+    主仓库是"整题一块 B 板"，分支是"每问一块 B 板"，路径常量、--gate 路由与
+    B 板渲染都因此不同；把它们列进白名单是声明差异，不是允许漂移。
+    """
+    names = {
+        "design_board.py": "DUAL_GATE_MAIN = 1\n",
+        "design_board_html.py": "HTML_MAIN = 1\n",
+        "design_board_xlsx.py": "XLSX_MAIN = 1\n",
+    }
+    branch_files = {
+        "design_board.py": "DUAL_GATE_BRANCH = 1\n",
+        "design_board_html.py": "HTML_BRANCH = 1\n",
+        "design_board_xlsx.py": "XLSX_BRANCH = 1\n",
+    }
+    primary = make_repo(tmp_path / "p", dict(names))
+    branch = make_repo(tmp_path / "b", dict(branch_files))
+
+    result = tools_sync_checker.build_result(primary, branch)
+
+    assert result["passed"] is True
+    assert result["differs_expected"] == [
+        "design_board.py",
+        "design_board_html.py",
+        "design_board_xlsx.py",
+    ]
+    assert result["differs_unexpected"] == []
+    assert tools_sync_checker.exit_code_for(result, "strict") == 0
+
+
+def test_dual_gate_new_tools_are_allowed_as_primary_only(tmp_path):
+    """双闸门新增工具（advice builder / trials runner）只存在于主仓库也不算漂移。"""
+    primary = make_repo(
+        tmp_path / "p",
+        {"model_advice_builder.py": "A\n", "perspective_trial_runner.py": "R\n"},
+    )
+    branch = make_repo(tmp_path / "b", {})
+
+    result = tools_sync_checker.build_result(primary, branch)
+
+    assert result["primary_only"] == ["model_advice_builder.py", "perspective_trial_runner.py"]
+    assert result["unexpected_primary_only"] == []
+    assert result["passed"] is True
+
+
+def test_branch_only_new_files_do_not_affect_verdict(tmp_path):
+    """分支独有新文件（如每问 B 板队列）只作信息展示，不影响 passed。"""
+    primary = make_repo(tmp_path / "p", {"alpha.py": "X = 1\n"})
+    branch = make_repo(
+        tmp_path / "b",
+        {"alpha.py": "X = 1\n", "question_queue.py": "Q\n", "gate_b_queue.py": "G\n"},
+    )
+
+    result = tools_sync_checker.build_result(primary, branch)
+
+    assert result["branch_only"] == ["gate_b_queue.py", "question_queue.py"]
+    assert result["passed"] is True
+    assert tools_sync_checker.exit_code_for(result, "strict") == 0
+
+
+def test_whitelist_documents_dual_gate_reason():
+    """白名单里必须有双闸门三件，避免以后有人"顺手清理"。"""
+    expected = tools_sync_checker.DEFAULT_EXPECTED_DIFFERENCES
+    for name in ("design_board.py", "design_board_html.py", "design_board_xlsx.py"):
+        assert name in expected, name
+    assert "model_advice_builder.py" in tools_sync_checker.DESIGN_GATE_NEW_FILES

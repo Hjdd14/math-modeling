@@ -18,7 +18,24 @@
 ## 6. 输出要求
 
 ## 7. 评分标准（如有）
+
+## 8. 待探索范式集合（引用 A 板）
+
+| paradigm_id | 范式 | 方法族 | 探索成本 | 来源 |
+|---|---|---|---|---|
+| P1 |  | statistical_inference | medium |  |
+| P3 |  | mechanistic | high |  |
+
+> 本小节的唯一来源是 `design_board.json`（A 板）的 `paradigm_selection`；改这里等于改板，必须重新 render → 重新确认。
+
+## 9. 硬约束（不可违背）
+
+## 10. 参考对账值
+
+## 11. 陷阱清单
 ```
+
+> **禁止**在 `problem_brief.md`（根与每问）写"锁定选型 / 已锁定 / 不得更换 / user_locked=true / 主模型已由…闸门"这类措辞。模型选择只能由 B 板的 `user_choice` 决定；`brief_completeness_checker.py` 会扫这几类字样并判 `brief_contains_locked_selection`。
 
 ## ambiguity_register.json
 
@@ -149,11 +166,14 @@
 
 ## design_board.json
 
-唯一真实来源：用户看到过哪些候选方案、选了哪个、改过几轮、有没有确认。`design_board.md` / `design_board.html` / `design_choices.xlsx` 都只是它的渲染视图，改动只在 JSON 一处。
+A 板的唯一真实来源：用户确认过哪些**待探索范式**、题目框架与高危假设是否接受。`design_board.md` / `.html` / `design_choices.xlsx` 只是视图。
+
+> A 板**不承载模型候选**：`options` 允许为空，`user_choice` 允许 null，`user_locked` 必须 false。模型选择在 B 板（见下）。
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "gate": "a",
   "board_id": "b-YYYY-MM-DD-xxxx",
   "board_sha256": "<由 design_board.py render 计算写入，不要手写>",
   "language": "python",
@@ -169,19 +189,89 @@
     {
       "id": "Q1",
       "goal": "...",
-      "options": [
+      "paradigm_set": [
         {
-          "id": "O1",
-          "name": "候选方案名（必须能与 model_selection_audit.json 的 candidates[].name 匹配）",
-          "tier": "recommended",
-          "rationale": "为什么推荐它",
-          "source_ref": {"type": "method_card", "ref": "OPT-01", "tier": "tier_a", "verified": true},
-          "complexity": "...",
-          "dependencies": [],
-          "risk": "...",
-          "mini_trial": {"sample": "...", "output": {"objective": 0}, "seconds": 0.0, "feasible": true}
+          "paradigm_id": "P1",
+          "name": "配对差单样本 t 检验族",
+          "family": "statistical_inference",
+          "source_ref": {"type": "method_card", "ref": "STA-03", "tier": "tier_a", "verified": true},
+          "why_explore": "题目给的是逐日配对观测，差值检验与题意最贴",
+          "explore_cost": {"level": "medium", "note": "一天可完成前提检验与多重校正"}
+        },
+        {
+          "paradigm_id": "P2",
+          "name": "非参数秩检验族",
+          "family": "statistical_inference",
+          "source_ref": {"type": "method_card", "ref": "STA-07", "tier": "tier_b", "verified": true},
+          "why_explore": "作为正态性不成立时的稳健对照",
+          "explore_cost": {"level": "low", "note": "半天"}
+        },
+        {
+          "paradigm_id": "P3",
+          "name": "守恒/流入流出机理模型",
+          "family": "mechanistic",
+          "source_ref": {"type": "paper", "ref": "DOI:...", "tier": "tier_b", "verified": false,
+                         "unverified_reason": "尚未核对原文参数适用范围"},
+          "why_explore": "与统计族异质，可解释园区总量守恒约束",
+          "explore_cost": {"level": "high", "note": "要建质量平衡方程"}
         }
       ],
+      "paradigm_selection": ["P1", "P3"],
+      "options": [],
+      "user_choice": null,
+      "user_locked": false,
+      "user_comment": "",
+      "confirmed": false
+    }
+  ],
+  "pending_decisions": [],
+  "no_change_rounds": 0,
+  "confirmed_at": null,
+  "confirmed_by": null,
+  "receipt_origin": null,
+  "confirm_code": null,
+  "confirm_attested": false
+}
+```
+
+硬规则（`design_board_checker.py --gate a` 逐条校验）：
+
+- 每题 `paradigm_set` **3–5 项**；每项必须有 `paradigm_id` / `name` / `family` / `source_ref` / `why_explore` / `explore_cost`。
+- 同题内至少 1 个 `family` 与其他不同（异质），否则 `paradigm_no_heterogeneous`。
+- `paradigm_selection` 是 `paradigm_set` 的子集、≥2 项、且覆盖 ≥2 个方法族。
+- `user_locked` 必须为 `false`；`user_choice` 必须为 `null`；`options` 允许 `[]`。
+- `source_ref.verified == false` 必须同时给 `unverified_reason`。
+- `confirmed: true` 时必须有 `confirmed_at` / `confirmed_by` / `receipt_origin` / `confirm_code`（4 位）/ `confirm_attested`。
+- `no_change_rounds >= 2` 才允许确认。
+- `board_sha256` 由 `render` 回写；手写等于自证。
+
+## design_board_gate_b.json
+
+B 板：用户在哪几个模型里选了哪个。与 A 板同构（`questions[] / options[]`），额外嵌入 `advice` 与 `advice_sha256`；主仓库是整题一块板，分支是每问一块板。
+
+```json
+{
+  "schema_version": 2,
+  "gate": "b",
+  "question_scope": "problem",
+  "board_id": "gb-YYYY-MM-DD-xxxx",
+  "board_sha256": "<render 写入>",
+  "advice_ref": "model_advice.json",
+  "advice_sha256": "<model_advice.json 的字节哈希>",
+  "language": "python",
+  "revision": 1,
+  "problem_summary": {"title": "...", "questions": ["问题一", "问题二"]},
+  "questions": [
+    {
+      "id": "Q1",
+      "goal": "...",
+      "options": [
+        {"id": "O1", "name": "配对差 t 检验族", "verdict": "recommended", "score": 86.5,
+         "origin": "perspective:statistician", "paradigm_id": "P1"},
+        {"id": "O2", "name": "Wilcoxon + Hodges-Lehmann", "verdict": "not_recommended", "score": 78.0,
+         "origin": "perspective:optimizer", "paradigm_id": "P1"}
+      ],
+      "advice": {"is_judge_panel": false, "candidates": [], "data_comparison": {}, "scoring_rubric": {}},
       "user_choice": "O1",
       "user_locked": true,
       "user_comment": "",
@@ -198,14 +288,121 @@
 }
 ```
 
-硬规则（checker 逐条校验）：
+硬规则（`--gate b`）：候选 5–8 个且与 `advice.candidates[].option_id` 一一对应；`advice_sha256` 必须等于建议文件字节哈希；`user_choice` 必须是某个 option 的 id；`preauthorized: true` 在 excellence 下判 error。
 
-- 每题至少 2 个 `options`，否则不算"给出过选择"；每个 option 的 `name` 必须能与 `model_selection_audit.json` 的 `candidates[].name` 对上。
-- 每个 option 必须有 `rationale` / `risk` / `source_ref` / `mini_trial`；`source_ref.verified == false` 时必须同时给出 `unverified_reason`，禁止"假装查过"。
-- `user_choice` 必须是某个 option 的 `id`；`user_locked == true` 的选项在下游阶段不得被推翻，要改只能回到决策板再走一轮。
-- `confirmed: true` 时必须有 `confirmed_at` / `confirmed_by` / `receipt_origin` / `confirm_code`（4 位）/ `confirm_attested`（布尔）。
-- `no_change_rounds >= 2` 才允许 `confirmed: true`：至少两轮用户明确表示"不再改"，才算收敛。
-- `board_sha256` 由 `design_board.py render` 回写，与去掉该字段后的内容哈希一致；手写等于自证，checker 会判失败。
+## model_advice.json
+
+建议 Agent 的产物：**1 个建议 + 其余不建议 + 打分 + 多组真实数据对比**。不是评委结论（`is_judge_panel: false`）。
+
+```json
+{
+  "schema_version": 2,
+  "question_id": "Q1",
+  "generated_at": "ISO8601",
+  "is_judge_panel": false,
+  "disclaimer": "本文件是选型建议，不是评委审查。评委审查在 Phase 4。",
+  "scoring_rubric": {
+    "dimensions": [
+      {"id": "fit", "name": "题意契合度", "weight": 0.3},
+      {"id": "rigor", "name": "方法严谨性", "weight": 0.25},
+      {"id": "evidence", "name": "数据支持度", "weight": 0.25},
+      {"id": "risk", "name": "实施与解释风险(反向)", "weight": 0.2}
+    ],
+    "scale": "0-100"
+  },
+  "candidates": [
+    {
+      "option_id": "O1", "origin": "perspective:statistician", "name": "...", "paradigm_id": "P1",
+      "verdict": "recommended", "score": 86.5,
+      "dimension_scores": {"fit": 90, "rigor": 88, "evidence": 85, "risk": 80},
+      "pros": ["三口径结论一致", "可手算复核"],
+      "cons": ["多重校正后偏保守"],
+      "evidence_refs": ["perspective_trials.json#O1/full"]
+    },
+    {
+      "option_id": "O2", "origin": "perspective:optimizer", "name": "...", "paradigm_id": "P1",
+      "verdict": "not_recommended", "score": 78.0,
+      "dimension_scores": {"fit": 70, "rigor": 85, "evidence": 82, "risk": 75},
+      "pros": ["非参数，不依赖正态", "抗离群"],
+      "cons": ["正态成立时过度保守", "功效略低"],
+      "why_not": ["与 O1 结论相同，无增量信息", "在正态性成立时属过度保守"],
+      "when_better": "若 Shapiro 拒绝正态且样本量小，O2 应升为主模型",
+      "evidence_refs": ["perspective_trials.json#O2/full"]
+    }
+  ],
+  "data_comparison": {
+    "comparable_columns": ["runtime_s", "finished"],
+    "rows": [
+      {"slice_id": "full", "option_id": "O1", "trials_ref": "O1/full",
+       "comparable": {"runtime_s": 0.91, "finished": true},
+       "own": {"p_value": 0.0258}}
+    ],
+    "baseline_row": {"slice_id": "full", "option_id": "baseline",
+                     "comparable": {"runtime_s": 0.004, "finished": true}}
+  },
+  "recommended_option_id": "O1",
+  "aggregate_note": "为什么推荐它，剩余风险交给 Phase 4"
+}
+```
+
+硬规则：候选 5–8；恰好 1 个 recommended；全部有分且维度分键齐全；pros/cons 各 ≥2；不推荐项 `why_not` ≥2 + `when_better`；`data_comparison` ≥2 slice × 全候选且每格可回溯到 `perspective_trials.json`（数值一致，不得手改）；`comparable` 跨候选同键；不得出现评委结论措辞。
+
+## perspective_trials.json
+
+每视角真实试算。**唯一写入口是 `tools/perspective_trial_runner.py`**，手填记录会被 checker 判 `trials_not_tool_executed`。
+
+```json
+{
+  "schema_version": 2,
+  "question_id": "Q1",
+  "generated_by": "tools/perspective_trial_runner.py",
+  "run_id": "2026-11-01T10:00:00+08:00-3f9a1c",
+  "slice_axis": "data_rows",
+  "slice_axis_note": "",
+  "slices": [
+    {"slice_id": "full", "description": "全部数据", "data_ref": "data.csv", "selector": {"rows": "all"}},
+    {"slice_id": "holdout", "description": "留出 20%", "data_ref": "data.csv", "selector": {"rows": "56..70"}}
+  ],
+  "metric_definitions": {
+    "comparable": [{"key": "runtime_s", "unit": "s"}, {"key": "finished", "unit": "bool"}],
+    "own": {"O1": [{"key": "p_value", "unit": "1"}]}
+  },
+  "perspectives": [
+    {
+      "perspective": "statistician", "option_id": "O1",
+      "script": "perspective_trials/statistician.py", "script_sha256": "...",
+      "runs": [
+        {"slice_id": "full", "executed_by": "tool", "runner_version": "1.0", "run_seq": 1,
+         "exit_code": 0, "runtime_s": 0.9123, "stdout_sha256": "...", "captured_at": "ISO8601",
+         "metrics": {"comparable": {"runtime_s": 0.9123, "finished": true},
+                     "own": {"p_value": 0.0258}},
+         "reproduce_cmd": "python tools/perspective_trial_runner.py run --perspective statistician --option-id O1 --slice full"}
+      ]
+    }
+  ]
+}
+```
+
+硬规则：slices ≥2（无数据集用 `parameter`/`scenario` 轴并写 `slice_axis_note`）；perspectives ≥5 且每个都有 `option_id`；每个 run 必须 `executed_by: "tool"` + `exit_code` + `stdout_sha256` + `captured_at`；同一 slice 下各视角 `comparable` 键集合一致。
+
+## reopen_gate_request.json
+
+```json
+{
+  "schema_version": 1,
+  "question_id": "Q1",
+  "raised_by": "arbitrator",
+  "raised_at": "ISO8601",
+  "gate": "b",
+  "user_choice_id": "O1",
+  "blocking_reason": "solver_infeasible",
+  "evidence": ["optimization_certificate.json#status=infeasible"],
+  "proposed_alternatives": ["O3"],
+  "requires_user_reconfirm": true
+}
+```
+
+`gate` 取 `a`（范式不成立）或 `b`（所选方案不可行）。产出后必须停下等用户重新确认，不得自行换方案。
 
 ## model_selection_audit.json
 

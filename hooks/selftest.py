@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """pre_tool_use_guard.py 的自测脚本（零第三方依赖）。
 
-模拟 6 个场景，把宿主事件 JSON 从 stdin 喂给 guard，再断言 stdout /
+模拟 10 个场景，把宿主事件 JSON 从 stdin 喂给 guard，再断言 stdout /
 stderr / exit code：
 
 1. 未确认 + 写 solution.py              -> deny
@@ -11,9 +11,13 @@ stderr / exit code：
 4. 未确认 + 写 solution_tests.py        -> deny
 5. MM_GATE_BYPASS=1 + 未确认 + solution.py -> allow，且 stderr 有警告
 6. 缺字段 / 非法 JSON                   -> 不崩，allow（fail-open）
+7. B 闸门（方案择定）未确认 + 写 questions/q1/solution.py -> deny（提示 B 闸门）
+8. B 闸门已确认 + 写 questions/q1/solution.py 与根 solution.py -> allow
+9. 写 questions/q1/perspective_trials/statistician.py -> allow（试算代码放行）
+10. legacy 工作区（A 板 schema_version < 2、无 B 板）-> allow + stderr 警告
 
 运行：``python hooks/selftest.py``
-全部通过打印 ``6/6 passed`` 并 exit 0；否则打印失败详情并 exit 1。
+全部通过打印 ``10/10 passed`` 并 exit 0；否则打印失败详情并 exit 1。
 """
 
 import json
@@ -59,11 +63,64 @@ QUESTIONS_ONLY_BOARD = {
     "questions": [{"id": "Q1", "confirmed": True}, {"id": "Q2", "confirmed": True}],
 }
 
+# A 板 schema v2（双闸门新流程）：只确认题意框架与待探索范式，不锁定模型选型。
+GATE_A_V2_CONFIRMED = {
+    "schema_version": 2,
+    "gate": "a",
+    "board_id": "b-2026-10-30-selftest",
+    "questions": [
+        {
+            "id": "Q1",
+            "paradigm_set": [{"paradigm_id": "P1", "family": "statistical_inference"}],
+            "paradigm_selection": ["P1"],
+            "options": [],
+            "user_choice": None,
+            "user_locked": False,
+            "confirmed": True,
+        }
+    ],
+    "confirmed": True,
+    "confirmed_at": "2026-10-30T12:00:00+00:00",
+    "confirmed_by": "user",
+}
+
+GATE_B_UNCONFIRMED = {
+    "schema_version": 2,
+    "gate": "b",
+    "question_scope": "question",
+    "questions": [{"id": "Q1", "user_choice": None, "confirmed": False}],
+    "confirmed": False,
+}
+
+GATE_B_CONFIRMED = {
+    "schema_version": 2,
+    "gate": "b",
+    "question_scope": "question",
+    "questions": [{"id": "Q1", "user_choice": "O1", "confirmed": True}],
+    "confirmed": True,
+    "confirmed_at": "2026-10-30T12:30:00+00:00",
+    "confirmed_by": "user",
+}
+
+
+def _write_named(directory, name, payload):
+    """把 payload（dict 或原始文本）写到 directory/name。"""
+    directory.mkdir(parents=True, exist_ok=True)
+    text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
+    path = directory / name
+    path.write_text(text, encoding="utf-8")
+    return path
+
 
 def _write_board(workspace, payload):
-    workspace.mkdir(parents=True, exist_ok=True)
-    text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
-    (workspace / "design_board.json").write_text(text, encoding="utf-8")
+    """写 A 板（design_board.json）。"""
+    _write_named(workspace, "design_board.json", payload)
+    return workspace
+
+
+def _write_gate_b(workspace, payload):
+    """写 B 板（design_board_gate_b.json）。"""
+    _write_named(workspace, "design_board_gate_b.json", payload)
     return workspace
 
 
@@ -245,6 +302,137 @@ def scenario_6(root):
         )
 
 
+def _deny_reason(proc):
+    """取 Claude Code 风格 deny 的 reason；不是 deny 返回空串。"""
+    try:
+        data = json.loads(_stdout(proc).strip() or "{}")
+    except ValueError:
+        return ""
+    if not isinstance(data, dict) or data.get("decision") != "deny":
+        return ""
+    return data.get("reason") or ""
+
+
+def scenario_7(root):
+    """B 闸门未确认：questions/q1/solution.py 与根 solution.py 都必须 deny。"""
+    # 分支形态：每问一块 B 板，放在 questions/q1/ 下，未确认
+    workspace = _write_board(root / "ws_gate_b_pending", GATE_A_V2_CONFIRMED)
+    question_dir = workspace / "questions" / "q1"
+    _write_named(question_dir, "design_board_gate_b.json", GATE_B_UNCONFIRMED)
+    target = question_dir / "solution.py"
+
+    proc = _run(_write_event(target))
+    reason = _deny_reason(proc)
+    _check(bool(reason), "B 板未确认时写 questions/q1/solution.py 应被 deny", proc)
+    _check("设计闸门未通过" in reason, "拒绝文案应说明设计闸门未通过", proc)
+    _check("B 闸门" in reason, "拒绝文案应明确指出这是 B 闸门", proc)
+    _check(
+        "design_board_gate_b.json" in reason,
+        "拒绝文案应点名 design_board_gate_b.json",
+        proc,
+    )
+    _check(
+        "confirm --gate b" in reason and "render --gate b" in reason,
+        "拒绝文案应给出 B 板 render/confirm 命令",
+        proc,
+    )
+    _check(
+        "design_board.json" in reason,
+        "拒绝文案应同时给出 A 板命令（两板命令都要有）",
+        proc,
+    )
+
+    # Cursor 风格同样拒绝
+    cursor = _run(_write_event(target), env_extra={"MM_HOOK_STYLE": "cursor"})
+    _check(cursor.returncode == 2, "B 闸门 Cursor 风格拒绝应 exit 2", cursor)
+    _check("B 闸门" in _stderr(cursor), "Cursor 拒绝应在 stderr 说明原因", cursor)
+
+    # 主仓库形态：工作区根一块 B 板缺失，A 板已是 schema v2 → 根 solution.py 也 deny
+    root_ws = _write_board(root / "ws_gate_b_missing", GATE_A_V2_CONFIRMED)
+    root_target = root_ws / "solution.py"
+    root_proc = _run(_write_event(root_target))
+    root_reason = _deny_reason(root_proc)
+    _check(
+        "design_board_gate_b.json" in root_reason,
+        "A 板 schema v2 + 同级无 B 板时根 solution.py 应 deny",
+        root_proc,
+    )
+
+
+def scenario_8(root):
+    """B 闸门已确认：questions/q1 与工作区根的交付代码都放行。"""
+    workspace = _write_board(root / "ws_gate_b_confirmed", GATE_A_V2_CONFIRMED)
+    question_dir = workspace / "questions" / "q1"
+    _write_named(question_dir, "design_board_gate_b.json", GATE_B_CONFIRMED)
+    target = question_dir / "solution.py"
+
+    proc = _run(_write_event(target))
+    _check(_is_allow(proc), "B 板已确认时应放行 questions/q1/solution.py", proc)
+    _check(_stdout(proc).strip() == "", "Claude 风格放行时 stdout 应为空", proc)
+
+    # 主仓库形态：A 板 v2 + 同级 B 板已确认 → 根 solution.py 放行
+    root_ws = _write_board(root / "ws_gate_b_root_confirmed", GATE_A_V2_CONFIRMED)
+    _write_gate_b(root_ws, GATE_B_CONFIRMED)
+    root_proc = _run(_write_event(root_ws / "solution.py"))
+    _check(_is_allow(root_proc), "A 板 v2 + 同级 B 板已确认时应放行根 solution.py", root_proc)
+
+
+def scenario_9(root):
+    """perspective_trials/** 是试算代码，不是交付代码：无论板状态都放行。"""
+    # 分支形态：A 板 v2 未确认（甚至没有 B 板），试算脚本仍然放行
+    workspace = root / "ws_trials"
+    question_dir = workspace / "questions" / "q1"
+    _write_named(
+        question_dir,
+        "design_board.json",
+        {"schema_version": 2, "questions": [{"id": "Q1", "confirmed": False}]},
+    )
+    trials_target = question_dir / "perspective_trials" / "statistician.py"
+    proc = _run(_write_event(trials_target))
+    _check(
+        _is_allow(proc),
+        "perspective_trials/ 下的试算脚本应放行（闸门只拦交付代码）",
+        proc,
+    )
+
+    # 工作区根形态：连板都没有也必须放行
+    bare = root / "ws_trials_bare"
+    bare_trials = bare / "perspective_trials" / "optimizer.py"
+    bare_proc = _run(_write_event(bare_trials))
+    _check(_is_allow(bare_proc), "无任何板时写 perspective_trials/ 也应放行", bare_proc)
+
+
+def scenario_10(root):
+    """legacy 工作区（A 板 schema < 2、无 B 板）：放行但必须留下警告。"""
+    workspace = _write_board(root / "ws_legacy_gate_a_only", CONFIRMED_BOARD)
+    question_dir = workspace / "questions" / "q1"
+    question_dir.mkdir(parents=True, exist_ok=True)
+    target = question_dir / "solution.py"
+
+    proc = _run(_write_event(target))
+    _check(_is_allow(proc), "legacy 板 + 无 B 板时 questions/q1/solution.py 应放行", proc)
+    stderr = _stderr(proc)
+    _check("警告" in stderr, "legacy 放行必须在 stderr 留下警告", proc)
+    _check("旧版 A 板" in stderr, "警告应说明这是旧版 A 板（legacy）", proc)
+    _check("--gate b" in stderr, "警告应提示补做 B 闸门的命令", proc)
+
+    # 工作区根同样放行 + 警告
+    root_proc = _run(_write_event(workspace / "solution.py"))
+    _check(_is_allow(root_proc), "legacy 板时根 solution.py 应放行", root_proc)
+    _check("旧版 A 板" in _stderr(root_proc), "根交付代码的 legacy 放行也应警告", root_proc)
+
+    # legacy 板但未确认 → 仍必须 deny（旧规则不放宽）
+    stale = _write_board(root / "ws_legacy_unconfirmed", UNCONFIRMED_BOARD)
+    stale_question = stale / "questions" / "q1"
+    stale_question.mkdir(parents=True, exist_ok=True)
+    stale_proc = _run(_write_event(stale_question / "solution.py"))
+    _check(
+        bool(_deny_reason(stale_proc)),
+        "legacy 板未确认时仍应 deny（legacy 只免 B 板，不免 A 板确认）",
+        stale_proc,
+    )
+
+
 SCENARIOS = [
     (1, "未确认 + solution.py -> deny（含 Cursor/解析失败子用例）", scenario_1),
     (2, "已确认 + solution.py -> allow", scenario_2),
@@ -252,6 +440,10 @@ SCENARIOS = [
     (4, "未确认 + solution_tests.py -> deny", scenario_4),
     (5, "MM_GATE_BYPASS=1 -> allow 且 stderr 警告", scenario_5),
     (6, "缺字段 / 非法 JSON -> fail-open", scenario_6),
+    (7, "B 闸门未确认 -> deny（含两板命令）", scenario_7),
+    (8, "B 闸门已确认 -> allow", scenario_8),
+    (9, "perspective_trials/** -> allow", scenario_9),
+    (10, "legacy A 板 + 无 B 板 -> allow + 警告", scenario_10),
 ]
 
 
@@ -268,22 +460,23 @@ def main():
                 func(root)
             except AssertionError as exc:
                 failures.append((number, name, str(exc)))
-                print("[%d/6] FAILED  %s" % (number, name))
+                print("[%d/%d] FAILED  %s" % (number, len(SCENARIOS), name))
                 print("      %s" % str(exc).replace("\n", "\n      "))
             except Exception as exc:  # 自测脚本自身的意外错误
                 failures.append((number, name, "%s: %s" % (type(exc).__name__, exc)))
-                print("[%d/6] ERROR   %s" % (number, name))
+                print("[%d/%d] ERROR   %s" % (number, len(SCENARIOS), name))
                 print("      %s: %s" % (type(exc).__name__, exc))
             else:
-                print("[%d/6] ok      %s" % (number, name))
+                print("[%d/%d] ok      %s" % (number, len(SCENARIOS), name))
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
+    total = len(SCENARIOS)
     if failures:
-        print("\n%d/6 passed" % (len(SCENARIOS) - len(failures)))
+        print("\n%d/%d passed" % (total - len(failures), total))
         return 1
 
-    print("\n6/6 passed")
+    print("\n%d/%d passed" % (total, total))
     return 0
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "math-modeling-skill"
-version = "1.0.0"
+version = "1.1.0"
 description = "A math modeling competition skill with parallel Agent gates, runnable tools, resumable state, Python and MATLAB support."
 readme = "README.md"
 requires-python = ">=3.10"

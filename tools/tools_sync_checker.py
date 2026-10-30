@@ -15,7 +15,8 @@
 - `identical`：两边哈希相同。
 - `differs_expected`：内容不同，但该文件**本来就该不同**（在预期差异白名单里）。
   典型是 `doctor.py` / `pipeline_check.py` / `workflow_runner.py`：分支有自己的
-  按小问交付逻辑，不能与主仓库逐字一致。
+  按小问交付逻辑，不能与主仓库逐字一致。双闸门改造后 `design_board*.py` 三件也
+  属于这一类：主仓库是整题一块 B 板，分支是每问一块。
 - `differs_unexpected`：不在白名单却内容不同 —— **这就是漂移**。
 - `primary_only`：只存在于主仓库。
 - `branch_only`：只存在于分支仓库（如 `question_queue.py`，分支独有能力）。
@@ -61,6 +62,15 @@ DEFAULT_EXPECTED_DIFFERENCES = frozenset(
         # 仍需人工确认是不是预期内的。
         "design_board_checker.py",
         "migrate_workspace.py",
+        # 双闸门（A 框架闸门 / B 方案择定闸门）在分支是"每问一块 B 板"，主仓库是
+        # "整题一块 B 板"，三件渲染/路由文件因此**本就该不同**（计划 v2 §4.1/4.1b）：
+        # - design_board.py：路径常量按 gate 计算、--gate/--board 路由、B 板 ingest/confirm；
+        # - design_board_html.py：B 板渲染（分数、pros/cons、多组数据对比表、确认码）；
+        # - design_board_xlsx.py：选择表模板按 gate 输出（design_choices_gate_b.xlsx）。
+        # 列进白名单是"声明差异"，不是"允许漂移"：差异一旦变化仍需人工确认。
+        "design_board.py",
+        "design_board_html.py",
+        "design_board_xlsx.py",
     }
 )
 
@@ -73,6 +83,9 @@ DESIGN_GATE_NEW_FILES = frozenset(
         "design_board_html.py",
         "design_board_xlsx.py",
         "tools_sync_checker.py",
+        # 双闸门新增工具（主仓库先行、分支随后同步）：只存在于主仓库时可接受。
+        "model_advice_builder.py",
+        "perspective_trial_runner.py",
     }
 )
 

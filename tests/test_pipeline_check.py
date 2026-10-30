@@ -884,3 +884,264 @@ def test_pipeline_check_decision_artifacts_pass_when_present(tmp_path):
     assert decision["warning"] is False
     assert decision["issues"] == []
     assert decision["checks"] == [{"name": "decision_artifacts", "passed": True, "missing": []}]
+
+
+# ---------------------------------------------------------------------------
+# 双闸门：--stage final 的跨板硬门槛（A 板 schema v2 ⇒ 必须有已确认的 B 板）
+# ---------------------------------------------------------------------------
+
+
+def _paradigm(paradigm_id, family):
+    return {
+        "paradigm_id": paradigm_id,
+        "name": "范式" + paradigm_id,
+        "family": family,
+        "source_ref": {
+            "type": "method_card",
+            "ref": "STA-03",
+            "tier": "tier_a",
+            "verified": True,
+        },
+        "why_explore": "覆盖不同方法族，避免五视角同族互抄",
+        "explore_cost": {"level": "low", "note": "样例数据可跑"},
+    }
+
+
+def write_gate_a_board(workspace, schema_version=2, confirmed=True):
+    """写 A 板夹具（默认 schema v2：只确认框架 + 待探索范式，不锁定选型）。"""
+    board = {
+        "schema_version": schema_version,
+        "gate": "a",
+        "board_id": "b-2026-10-30-pipeline-fixture",
+        "language": "python",
+        "revision": 1,
+        "problem_summary": {
+            "title": "双闸门总控夹具",
+            "questions": ["问题一：求最优产量"],
+            "key_ambiguities": [],
+        },
+        "mindmap": {"format": "mermaid", "source": "graph LR\n  P[产量最大化] --> Q1[问题一]"},
+        "questions": [
+            {
+                "id": "Q1",
+                "goal": "确定产量 x 使利润最大",
+                "paradigm_set": [
+                    _paradigm("P1", "statistical_inference"),
+                    _paradigm("P2", "optimization"),
+                    _paradigm("P3", "simulation"),
+                ],
+                "paradigm_selection": ["P1", "P2"],
+                "options": [],
+                "user_choice": None,
+                "user_locked": False,
+                "user_comment": "",
+                "confirmed": confirmed,
+            }
+        ],
+        "pending_decisions": [],
+        "no_change_rounds": 0,
+        "confirmed": confirmed,
+        "confirmed_at": "2026-10-30T12:00:00+00:00",
+        "confirmed_by": "user",
+    }
+    (workspace / "design_board.json").write_text(
+        json.dumps(board, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return board
+
+
+def write_gate_b_board(workspace, confirmed=True, user_choice="O1"):
+    """写 B 板夹具（只保证"板在 + 已确认 + 有选择"这三件，B 组细节由 checker 自己查）。"""
+    board = {
+        "schema_version": 2,
+        "gate": "b",
+        "question_scope": "problem",
+        "board_id": "gb-2026-10-30-pipeline-fixture",
+        "advice_ref": "model_advice.json",
+        "language": "python",
+        "revision": 1,
+        "problem_summary": {"title": "双闸门总控夹具", "questions": ["Q1"]},
+        "questions": [
+            {
+                "id": "Q1",
+                "goal": "确定产量 x 使利润最大",
+                "options": [{"id": "O1", "name": "整数规划", "verdict": "recommended", "score": 86.5}],
+                "user_choice": user_choice,
+                "user_locked": True,
+                "confirmed": confirmed,
+            }
+        ],
+        "pending_decisions": [],
+        "no_change_rounds": 0,
+        "confirmed": confirmed,
+        "confirmed_at": "2026-10-30T12:30:00+00:00",
+        "confirmed_by": "user",
+    }
+    (workspace / "design_board_gate_b.json").write_text(
+        json.dumps(board, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return board
+
+
+def test_stage_final_errors_when_schema_v2_board_has_no_gate_b(tmp_path):
+    """A 板 schema_version>=2 但缺 B 板 -> error（与 quality_mode 无关）。"""
+    write_gate_a_board(tmp_path, schema_version=2)
+
+    result = pipeline_check._two_gate_stage(tmp_path, "standard", "final")
+
+    assert result["passed"] is False
+    assert result["gate_a"]["new_flow"] is True
+    codes = {issue["code"] for issue in result["issues"]}
+    assert "missing_gate_b_board" in codes
+    issue = next(i for i in result["issues"] if i["code"] == "missing_gate_b_board")
+    assert issue["severity"] == "error"
+    assert "--gate b" in issue["message"]
+
+
+def test_stage_final_only_warns_for_legacy_board_without_gate_b(tmp_path):
+    """legacy A 板（schema<2）缺 B 板 -> warning，旧工作区不阻断。"""
+    write_gate_a_board(tmp_path, schema_version=1)
+
+    result = pipeline_check._two_gate_stage(tmp_path, "excellence", "final")
+
+    assert result["passed"] is True
+    assert result["warning"] is True
+    assert result["gate_a"]["new_flow"] is False
+    codes = {issue["code"] for issue in result["issues"]}
+    assert codes == {"gate_b_missing_legacy_workspace"}
+    assert {issue["severity"] for issue in result["issues"]} == {"warning"}
+
+
+def test_stage_final_passes_with_confirmed_gate_b_and_choices(tmp_path):
+    """A 板 v2 + B 板已确认 + 每题 user_choice 非空 -> 跨板门槛全过。"""
+    write_gate_a_board(tmp_path, schema_version=2)
+    write_gate_b_board(tmp_path, confirmed=True, user_choice="O1")
+
+    result = pipeline_check._two_gate_stage(tmp_path, "excellence", "final")
+
+    assert result["passed"] is True
+    assert result["issues"] == []
+    assert result["gate_b"]["confirmed"] is True
+    assert result["gate_b"]["choices_complete"] is True
+    assert result["gate_b"]["questions"] == 1
+
+
+def test_stage_final_reports_unconfirmed_and_unchosen_gate_b(tmp_path):
+    """B 板在但没确认 / 没有 user_choice：各报一个 error，不能合并吞掉。"""
+    write_gate_a_board(tmp_path, schema_version=2)
+    write_gate_b_board(tmp_path, confirmed=False, user_choice=None)
+
+    result = pipeline_check._two_gate_stage(tmp_path, "excellence", "final")
+
+    assert result["passed"] is False
+    codes = {issue["code"] for issue in result["issues"]}
+    assert "gate_b_not_confirmed" in codes
+    assert "gate_b_choice_missing" in codes
+    choice_issue = next(i for i in result["issues"] if i["code"] == "gate_b_choice_missing")
+    assert choice_issue["questions"] == ["Q1"]
+
+
+def test_stage_final_flags_invalid_gate_b_json(tmp_path):
+    """B 板存在但 JSON 坏掉：不能当成"没有 B 板"轻轻放过。"""
+    write_gate_a_board(tmp_path, schema_version=2)
+    (tmp_path / "design_board_gate_b.json").write_text("{ not json", encoding="utf-8")
+
+    result = pipeline_check._two_gate_stage(tmp_path, "excellence", "final")
+
+    assert result["passed"] is False
+    codes = {issue["code"] for issue in result["issues"]}
+    assert "invalid_gate_b_board" in codes
+
+
+def test_gate_b_check_is_skipped_when_board_absent(tmp_path):
+    """B 板不在场时不调 checker 的 gate b（缺板判定由 two_gate_stage 统一给出）。"""
+    result = pipeline_check._design_board_gate_b(tmp_path, "excellence", "final")
+
+    assert result["passed"] is True
+    assert result["skipped"] is True
+    assert result["reason"] == "missing_gate_b_board"
+
+
+def test_gate_b_check_delegates_advice_rules_to_checker(tmp_path):
+    """B 板在场时跑 B 组全量检查：缺 model_advice.json 必须由 checker 报出来。"""
+    write_gate_a_board(tmp_path, schema_version=2)
+    write_gate_b_board(tmp_path, confirmed=True, user_choice="O1")
+
+    result = pipeline_check._design_board_gate_b(tmp_path, "excellence", "final")
+
+    assert result.get("gate") == "b"
+    assert result.get("skipped") is not True
+    codes = {issue["code"] for issue in result.get("issues", [])}
+    # advice / trials 的规则由 checker 内部完成，pipeline 不再重复实现。
+    assert "advice_missing" in codes
+
+
+def test_run_checks_exposes_two_gate_stage_and_gate_b(tmp_path):
+    """run_checks 必须把 A 板、B 板、跨板门槛三个结果都并进 checks。"""
+    copy_workspace(tmp_path)
+    write_gate_a_board(tmp_path, schema_version=2)
+
+    result = pipeline_check.run_checks(str(tmp_path), "python", quality_mode="standard")
+
+    assert result["stage"] == "final"
+    assert "design_board_checker" in result["checks"]
+    assert "design_board_gate_b" in result["checks"]
+    assert "two_gate_stage" in result["checks"]
+    assert result["checks"]["two_gate_stage"]["passed"] is False
+    assert result["passed"] is False
+
+
+def test_main_repo_stage_has_no_question_variant(tmp_path):
+    """主仓库只提供 --stage final；question 是分支特性，不得在此暴露。"""
+    assert pipeline_check.STAGE_CHOICES == ("final",)
+    assert "question" not in pipeline_check.STAGE_CHOICES
+    assert pipeline_check.DEFAULT_STAGE == "final"
+    # 代码层仍容忍分支传进来的 stage（不崩、不改变主仓库判定范围）
+    result = pipeline_check._two_gate_stage(tmp_path, "standard", "question")
+    assert result["stage"] == "question"
+
+def test_stage_final_gate_b_missing_with_delivery_code_is_error(tmp_path):
+    """A 板 v2 + 已有 solution.py + 缺 B 板：必须是 error（"缺板+有代码"不得降级）。"""
+    copy_workspace(tmp_path)
+    write_gate_a_board(tmp_path, schema_version=2)
+    assert (tmp_path / "solution.py").is_file()
+    assert not (tmp_path / "design_board_gate_b.json").exists()
+
+    two_gate = pipeline_check._two_gate_stage(tmp_path, "standard", "final")
+
+    # 与 quality_mode 无关：A 板自己声明了新流程，B 板就是硬门槛。
+    assert two_gate["passed"] is False
+    assert "missing_gate_b_board" in {issue["code"] for issue in two_gate["issues"]}
+
+    result = pipeline_check.run_checks(str(tmp_path), "python", quality_mode="standard")
+    assert result["passed"] is False
+    assert result["checks"]["two_gate_stage"]["passed"] is False
+
+
+def test_stage_final_legacy_with_delivery_code_and_no_gate_b_is_warning(tmp_path):
+    """legacy A 板 + 已有 solution.py + 缺 B 板：只 warning，旧工作区不被判死。"""
+    copy_workspace(tmp_path)
+    write_gate_a_board(tmp_path, schema_version=1)
+
+    two_gate = pipeline_check._two_gate_stage(tmp_path, "excellence", "final")
+
+    assert two_gate["passed"] is True
+    assert two_gate["warning"] is True
+    assert {issue["code"] for issue in two_gate["issues"]} == {"gate_b_missing_legacy_workspace"}
+
+
+def test_stage_final_gate_b_failure_propagates_into_overall_result(tmp_path):
+    """B 板在场但 B 组规则不过（缺 advice）：整体 passed 必须为 False。"""
+    copy_workspace(tmp_path)
+    write_gate_a_board(tmp_path, schema_version=2)
+    write_gate_b_board(tmp_path, confirmed=True, user_choice="O1")
+
+    result = pipeline_check.run_checks(
+        str(tmp_path), "python", evidence_mode="standard", quality_mode="excellence"
+    )
+
+    gate_b = result["checks"]["design_board_gate_b"]
+    assert gate_b.get("skipped") is not True
+    assert gate_b["passed"] is False
+    assert "advice_missing" in {issue["code"] for issue in gate_b["issues"]}
+    assert result["passed"] is False

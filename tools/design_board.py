@@ -15,6 +15,7 @@ import secrets
 import sys
 import threading
 import webbrowser
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -35,6 +36,138 @@ SUBMIT_TOKEN_MARKER = "__MM_SUBMIT_TOKEN__"
 ROUND_NAME_PATTERN = re.compile(r"^round_(\d+)\.json$")
 CONFIRM_CODE_ENV = "MM_CONFIRM_CODE"
 MIN_NO_CHANGE_ROUNDS = 2
+
+# ---------------------------------------------------------------------------
+# 闸门与路径（契约 §3：--gate 决定全部产物文件名）
+# ---------------------------------------------------------------------------
+
+GATE_A = "a"
+GATE_B = "b"
+GATES = (GATE_A, GATE_B)
+
+#: 按闸门计算的默认文件名。A 闸门沿用改造前的名字，既有测试与样例工作区零迁移。
+GATE_FILES: dict[str, dict[str, str]] = {
+    GATE_A: {
+        "board": BOARD_FILE,
+        "markdown": MD_FILE,
+        "html": HTML_FILE,
+        "xlsx": XLSX_FILE,
+        "rounds": ROUNDS_DIR,
+        "submission": "design_board_submission.json",
+    },
+    GATE_B: {
+        "board": "design_board_gate_b.json",
+        "markdown": "design_board_gate_b.md",
+        "html": "design_board_gate_b.html",
+        "xlsx": "design_choices_gate_b.xlsx",
+        "rounds": "design_rounds_gate_b",
+        "submission": "design_board_gate_b_submission.json",
+    },
+}
+
+#: B 闸门的试算脚本目录（只读引用；写入由 tools/perspective_trial_runner.py 负责）。
+TRIALS_DIR = "perspective_trials"
+
+
+def normalize_gate(gate: str | None) -> str:
+    """把闸门参数规整成 a / b；未知值直接报错。"""
+    value = (gate or GATE_A).strip().lower()
+    if value not in GATES:
+        raise ValueError(f"未知闸门: {gate}（可用: a、b）")
+    return value
+
+
+@dataclass(frozen=True)
+class BoardPaths:
+    """某个闸门的全部产物路径（契约 §3）。
+
+    --board <path> 只覆盖**主数据**路径；视图与回执目录由主数据文件名派生
+    （design_board_gate_b.json → design_board_gate_b.html /
+    design_board_gate_b_rounds/）。主数据仍用约定名时回落到 GATE_FILES 里的标准
+    文件名，A 闸门因此与改造前逐字节一致。
+    """
+
+    gate: str
+    root: Path
+    board: Path
+    markdown: Path
+    html: Path
+    xlsx: Path
+    rounds: Path
+    submission: Path
+
+    @property
+    def board_name(self) -> str:
+        """主数据文件名（错误文案要用它，不能写死 design_board.json）。"""
+        return self.board.name
+
+    def as_dict(self) -> dict:
+        return {
+            "gate": self.gate,
+            "board": str(self.board),
+            "markdown": str(self.markdown),
+            "html": str(self.html),
+            "xlsx": str(self.xlsx),
+            "rounds": str(self.rounds),
+            "submission": str(self.submission),
+        }
+
+
+def board_paths(root: Path, gate: str = GATE_A, board: str | os.PathLike | None = None) -> BoardPaths:
+    """按闸门（含可选 --board 覆盖）算出全部产物路径。"""
+    gate_value = normalize_gate(gate)
+    default_names = GATE_FILES[gate_value]
+    root = Path(root)
+    if board is None or not str(board).strip():
+        board_path = root / default_names["board"]
+    else:
+        candidate = Path(board)
+        board_path = candidate if candidate.is_absolute() else root / candidate
+    names = default_names
+    if board_path.name != default_names["board"]:
+        stem = board_path.stem
+        names = {
+            "board": board_path.name,
+            "markdown": f"{stem}.md",
+            "html": f"{stem}.html",
+            "xlsx": f"{stem}.xlsx",
+            "rounds": f"{stem}_rounds",
+            "submission": f"{stem}_submission.json",
+        }
+    base = board_path.parent
+    return BoardPaths(
+        gate=gate_value,
+        root=root,
+        board=board_path,
+        markdown=base / names["markdown"],
+        html=base / names["html"],
+        xlsx=base / names["xlsx"],
+        rounds=base / names["rounds"],
+        submission=base / names["submission"],
+    )
+
+
+def _declared_gate(board: dict | None) -> str | None:
+    """板里显式声明了 gate 才返回闸门值；旧板（无该字段）返回 None（legacy 渲染）。"""
+    raw = board.get("gate") if isinstance(board, dict) else None
+    if isinstance(raw, str) and raw.strip().lower() in GATES:
+        return raw.strip().lower()
+    return None
+
+
+def effective_gate(board: dict | None, gate: str | None = None) -> str | None:
+    """渲染用闸门：板自报优先；否则只有显式 --gate b 才算 B 板。
+
+    这样「旧 A 板 + --gate a」仍是 legacy 渲染（逐字节不变），而新 B 板即使忘了写
+    gate 字段也能按 B 板渲染。
+    """
+    declared = _declared_gate(board)
+    if declared:
+        return declared
+    if isinstance(gate, str) and gate.strip().lower() == GATE_B:
+        return GATE_B
+    return None
+
 
 # 内容哈希口径（重要）：
 # 1) 按约定先移除 board_sha256；
@@ -156,7 +289,10 @@ def validate_board(payload: object, *, for_render: bool = False) -> list[str]:
             problems.append(f"questions[{index}].id 缺失")
             question_id = f"#{index}"
         options = question.get("options")
-        if not isinstance(options, list) or not options:
+        paradigms = question.get("paradigm_set")
+        has_paradigms = isinstance(paradigms, list) and bool(paradigms)
+        # A 板 schema v2 允许 options 为空：只要有 paradigm_set，选型留给 B 闸门。
+        if not isinstance(options, list) or (not options and not has_paradigms):
             problems.append(f"{question_id}.options 必须是非空数组")
             continue
         for option_index, option in enumerate(options):
@@ -167,7 +303,8 @@ def validate_board(payload: object, *, for_render: bool = False) -> list[str]:
                 problems.append(f"{question_id}.options[{option_index}].id 缺失")
             if not isinstance(option.get("name"), str) or not option.get("name", "").strip():
                 problems.append(f"{question_id}.options[{option_index}].name 缺失")
-    if for_render:
+    if for_render and effective_gate(payload) != GATE_B:
+        # B 板 schema 里没有 mindmap（导图属于 A 板的题意框架），只在 A 板强求。
         mindmap = payload.get("mindmap")
         source = mindmap.get("source") if isinstance(mindmap, dict) else None
         if not isinstance(source, str) or not source.strip():
@@ -175,14 +312,16 @@ def validate_board(payload: object, *, for_render: bool = False) -> list[str]:
     return problems
 
 
-def load_board(root: Path, *, for_render: bool = False) -> dict:
-    path = root / BOARD_FILE
+def load_board(root: Path, *, for_render: bool = False, paths: BoardPaths | None = None) -> dict:
+    """读入并浅校验主数据；错误文案里的文件名随闸门变化。"""
+    paths = paths or board_paths(root)
+    path = paths.board
     if not path.is_file():
-        raise ValueError(f"缺少 {BOARD_FILE}: {path}")
+        raise ValueError(f"缺少 {paths.board_name}: {path}")
     payload = read_json(path)
     problems = validate_board(payload, for_render=for_render)
     if problems:
-        raise ValueError(f"{BOARD_FILE} 缺少关键字段: " + "；".join(problems))
+        raise ValueError(f"{paths.board_name} 缺少关键字段: " + "；".join(problems))
     return payload  # type: ignore[return-value]
 
 
@@ -218,12 +357,13 @@ def derive_confirm_code(board_sha256: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def rounds_dir(root: Path) -> Path:
-    return root / ROUNDS_DIR
+def rounds_dir(root: Path, paths: BoardPaths | None = None) -> Path:
+    """回执目录：A 板是 design_rounds/，B 板是 design_rounds_gate_b/。"""
+    return paths.rounds if paths is not None else root / ROUNDS_DIR
 
 
-def list_round_files(root: Path) -> list[tuple[int, Path]]:
-    directory = rounds_dir(root)
+def list_round_files(root: Path, paths: BoardPaths | None = None) -> list[tuple[int, Path]]:
+    directory = rounds_dir(root, paths)
     if not directory.is_dir():
         return []
     found: list[tuple[int, Path]] = []
@@ -405,19 +545,79 @@ def _tier_label(option: dict) -> str:
     return TIER_LABELS.get(tier, "🟡 待评估")
 
 
-def render_markdown(board: dict) -> str:
+_ORDINALS = ("一", "二", "三", "四", "五", "六", "七", "八", "九", "十")
+
+
+def _paradigm_source_text(paradigm: dict) -> str:
+    """范式的来源摘要：类型 · 编号 · tier · 核验状态。"""
+    source_ref = paradigm.get("source_ref") if isinstance(paradigm.get("source_ref"), dict) else {}
+    parts = [
+        f"{_as_text(source_ref.get('type')) or '未标类型'} {_as_text(source_ref.get('ref')) or '未编号'}",
+    ]
+    if source_ref.get("tier"):
+        parts.append(f"tier={_as_text(source_ref.get('tier'))}")
+    verified = source_ref.get("verified")
+    if verified is True:
+        parts.append("已核验")
+    elif verified is False:
+        reason = source_ref.get("unverified_reason")
+        parts.append(f"未核验（{_clip(reason, 30)}）" if reason else "未核验（未给出原因）")
+    return "；".join(parts)
+
+
+def _paradigm_cost_text(paradigm: dict) -> str:
+    """探索成本：等级（一句话说明）。"""
+    cost = paradigm.get("explore_cost") if isinstance(paradigm.get("explore_cost"), dict) else {}
+    level = _as_text(cost.get("level")) or "未标"
+    note = _clip(cost.get("note"), 40)
+    return f"{level}（{note}）" if note else level
+
+
+def _paradigms(question: dict) -> list[dict]:
+    """取某题 paradigm_set 里的对象项（缺失/类型不对返回空列表）。"""
+    paradigms = question.get("paradigm_set")
+    if not isinstance(paradigms, list):
+        return []
+    return [item for item in paradigms if isinstance(item, dict)]
+
+
+def _has_paradigms(question: dict) -> bool:
+    """某题是否带了范式集合（旧板没有该字段）。"""
+    return bool(_paradigms(question))
+
+
+def render_markdown(board: dict, *, gate: str | None = None) -> str:
+    """渲染 Markdown 视图；B 板走独立结构（候选分数、建议理由、多组数据对比）。"""
+    mode = effective_gate(board, gate)
+    if mode == GATE_B:
+        return render_markdown_gate_b(board)
+
     questions = [question for question in board.get("questions", []) if isinstance(question, dict)]
     confirm_code = _as_text(board.get("confirm_code"))
     confirmed = bool(board.get("confirmed"))
-    lines: list[str] = [
-        f"# 建模方案决策板 · 第 {_board_round(board)} 轮",
-        "",
+    counter = [0]
+
+    def sec(title: str) -> str:
+        """二级标题：序号自增，插新小节时不必手改后续编号。"""
+        index = counter[0]
+        counter[0] += 1
+        ordinal = _ORDINALS[index] if index < len(_ORDINALS) else str(index + 1)
+        return f"## {ordinal}、{title}"
+
+    lines: list[str] = [f"# 建模方案决策板 · 第 {_board_round(board)} 轮", ""]
+    if mode == GATE_A:
+        lines.extend([
+            "> **本板 = A 闸门（框架与探索边界）**：只确认题意框架、高严重度假设与待探索范式集合；"
+            "本板不锁定模型选型，选型在 B 闸门。",
+            ">",
+        ])
+    lines.extend([
         f"> **确认码：{confirm_code}**",
         ">",
         f"> 运行 `python tools/design_board.py confirm --workspace . --apply` 时需要输入上面这 4 位确认码。",
         ">",
         f"> **状态**：{'✅ 已确认' if confirmed else '⏳ 待确认'}",
-    ]
+    ])
     if confirmed:
         lines.append(
             f"> **确认信息**：{_as_text(board.get('confirmed_at')) or '未知时间'} · by {_as_text(board.get('confirmed_by')) or '未知来源'}"
@@ -432,8 +632,8 @@ def render_markdown(board: dict) -> str:
         lines.append(f"> **题目**：{_clip(problem_summary.get('title'), 60)}")
     lines.extend(["", "---", ""])
 
-    # 一、结论速览
-    lines.extend(["## 一、结论速览", ""])
+    # 结论速览
+    lines.extend([sec("结论速览"), ""])
     overview_rows: list[list[object]] = []
     for question in questions:
         option = _find_option(question, question.get("user_choice"))
@@ -448,10 +648,47 @@ def render_markdown(board: dict) -> str:
     lines.extend(_table(["小问", "选定方案", "一句话理由"], overview_rows))
     lines.extend(["", "---", ""])
 
-    # 二、模型结构总览
+    # 待探索范式集合（A 板新增；旧板没有该字段就整节省略）
+    if any(_has_paradigms(question) for question in questions):
+        lines.extend([
+            sec("待探索范式集合（A 闸门不选型）"),
+            "",
+            "> 这是探索边界，不是最终方案：B 闸门才会比较具体模型并让你择定。"
+            "只有 paradigm_selection 里的范式进入 Phase 1 五视角深挖。",
+            "",
+        ])
+        for question in questions:
+            paradigms = _paradigms(question)
+            if not paradigms:
+                continue
+            selection = question.get("paradigm_selection")
+            selected = [_as_text(item) for item in selection] if isinstance(selection, list) else []
+            lines.extend([f"### {_question_label(question)}", ""])
+            if selected:
+                lines.append(f"**已选范式**：{'、'.join(selected)}")
+            else:
+                lines.append("**已选范式**：（尚未选择，paradigm_selection 为空）")
+            lines.append("")
+            paradigm_rows: list[list[object]] = []
+            for paradigm in paradigms:
+                paradigm_id = _as_text(paradigm.get("paradigm_id"))
+                mark = "✅ " if paradigm_id and paradigm_id in selected else ""
+                paradigm_rows.append([
+                    f"{mark}**{paradigm_id or '—'}**",
+                    _as_text(paradigm.get("name")) or "—",
+                    _as_text(paradigm.get("family")) or "—",
+                    _paradigm_source_text(paradigm),
+                    _paradigm_cost_text(paradigm),
+                    _clip(paradigm.get("why_explore"), 60) or "—",
+                ])
+            lines.extend(_table(["范式", "名称", "方法族", "来源", "探索成本", "为什么探索"], paradigm_rows))
+            lines.append("")
+        lines.extend(["---", ""])
+
+    # 模型结构总览
     mindmap = board.get("mindmap") if isinstance(board.get("mindmap"), dict) else {}
     lines.extend([
-        "## 二、模型结构总览",
+        sec("模型结构总览"),
         "",
         "```mermaid",
         _as_text(mindmap.get("source")).strip(),
@@ -468,7 +705,7 @@ def render_markdown(board: dict) -> str:
     pending_raw = board.get("pending_decisions")
     pending_items = [_as_text(item) for item in pending_raw] if isinstance(pending_raw, list) else []
     lines.extend([
-        f"## 三、待你决定（{len(undecided) + len(pending_items)} 项）",
+        sec(f"待你决定（{len(undecided) + len(pending_items)} 项）"),
         "",
         "> `- [x]` 标记的是 AI 推荐项（`tier: recommended`），不是你的最终选择；最终选择以 `user_choice` 为准。",
         "",
@@ -512,7 +749,7 @@ def render_markdown(board: dict) -> str:
 
     # 四、候选方案对比
     lines.extend([
-        "## 四、候选方案对比",
+        sec("候选方案对比"),
         "",
         "> 这是做决策的地方：先看推荐度与主要风险，再看试算结果是否为真实数值（应附复跑命令）。",
         "",
@@ -537,27 +774,42 @@ def render_markdown(board: dict) -> str:
         lines.append("")
     lines.extend(["---", ""])
 
-    # 五、已锁定
-    lines.extend(["## 五、已锁定（AI 不得推翻）", ""])
-    locked_questions = [question for question in questions if question.get("user_locked")]
-    if locked_questions:
-        locked_rows: list[list[object]] = []
-        for question in locked_questions:
-            option = _find_option(question, question.get("user_choice"))
-            locked_rows.append([
-                _question_label(question),
-                f"{_as_text(question.get('id'))} 模型选择",
-                f"**{_as_text(option.get('id'))} {_as_text(option.get('name'))}**" if option else "（未选择）",
-                _clip(question.get("user_comment"), 40) or "—",
-            ])
-        lines.extend(_table(["小问", "锁定项", "选择", "备注"], locked_rows))
+    # 已锁定：A 板 schema v2 不再承载模型选型
+    if mode == GATE_A:
+        lines.extend([sec("本板不锁定模型选型"), ""])
+        locked_questions = [question for question in questions if question.get("user_locked")]
+        if locked_questions:
+            ids = "、".join(_as_text(question.get("id")) for question in locked_questions)
+            lines.append(
+                f"> ⚠ 检测到 {len(locked_questions)} 项 user_locked: true（{ids}）：A 闸门不允许锁定模型选型"
+                "（checker 会报 gate_a_user_locked_forbidden），请改回 false。"
+            )
+        else:
+            lines.append(
+                "> A 闸门只确认题意框架、假设与待探索范式集合；具体模型由 B 闸门择定，本板没有任何锁定项。"
+            )
+        lines.extend(["", "---", ""])
     else:
-        lines.append("暂无锁定项（所有 `user_locked` 均为 false）。")
-    lines.extend(["", "---", ""])
+        lines.extend([sec("已锁定（AI 不得推翻）"), ""])
+        locked_questions = [question for question in questions if question.get("user_locked")]
+        if locked_questions:
+            locked_rows: list[list[object]] = []
+            for question in locked_questions:
+                option = _find_option(question, question.get("user_choice"))
+                locked_rows.append([
+                    _question_label(question),
+                    f"{_as_text(question.get('id'))} 模型选择",
+                    f"**{_as_text(option.get('id'))} {_as_text(option.get('name'))}**" if option else "（未选择）",
+                    _clip(question.get("user_comment"), 40) or "—",
+                ])
+            lines.extend(_table(["小问", "锁定项", "选择", "备注"], locked_rows))
+        else:
+            lines.append("暂无锁定项（所有 `user_locked` 均为 false）。")
+        lines.extend(["", "---", ""])
 
-    # 六、来源速查
+    # 来源速查
     lines.extend([
-        "## 六、来源速查",
+        sec("来源速查"),
         "",
         "<details>",
         "<summary>展开：各候选的来源、tier 与核验状态（默认折叠，避免淹没正文）</summary>",
@@ -593,6 +845,335 @@ def render_markdown(board: dict) -> str:
     return "\n".join(lines)
 
 
+def _advice_of(board: dict, question: dict) -> dict:
+    """取某题的建议块：题内 advice 优先，其次板级 advice（单问 B 板的兼容写法）。"""
+    advice = question.get("advice")
+    if isinstance(advice, dict) and advice:
+        return advice
+    board_advice = board.get("advice")
+    if isinstance(board_advice, dict) and board_advice:
+        return board_advice
+    return {}
+
+
+def _advice_candidates(advice: dict) -> dict[str, dict]:
+    """把 advice.candidates 按 option_id 建索引（脏数据一律跳过）。"""
+    index: dict[str, dict] = {}
+    candidates = advice.get("candidates")
+    if not isinstance(candidates, list):
+        return index
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        option_id = _as_text(item.get("option_id") or item.get("id"))
+        if option_id:
+            index[option_id] = item
+    return index
+
+
+def _verdict_text(option: dict, candidate: dict | None = None) -> str:
+    """B 板的建议标签：建议采用 / 不建议 / 未表态。"""
+    raw = _as_text(option.get("verdict") or (candidate or {}).get("verdict")).strip().lower()
+    if raw in ("recommended", "recommend"):
+        return "🟢 建议采用"
+    if raw in ("not_recommended", "not-recommended", "rejected", "reject"):
+        return "⛔ 不建议"
+    return "⚪ 未表态"
+
+
+def _score_text(value: object) -> str:
+    """分数文本：数值保留一位小数，非数值给 —。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "—"
+    return f"{float(value):.1f}"
+
+
+def _dimension_text(candidate: dict, rubric: dict) -> str:
+    """维度分文本：按评分口径顺序写 key=score，权重一并标出。"""
+    raw_scores = candidate.get("dimension_scores")
+    scores = raw_scores if isinstance(raw_scores, dict) else {}
+    raw_dimensions = rubric.get("dimensions")
+    dimensions = raw_dimensions if isinstance(raw_dimensions, list) else []
+    parts: list[str] = []
+    seen: list[str] = []
+    for dimension in dimensions:
+        if not isinstance(dimension, dict):
+            continue
+        key = _as_text(dimension.get("id"))
+        if not key:
+            continue
+        seen.append(key)
+        weight = dimension.get("weight")
+        label = f"{key}={_score_text(scores.get(key))}"
+        if isinstance(weight, (int, float)) and not isinstance(weight, bool):
+            label += f"(w={weight:g})"
+        parts.append(label)
+    for key, value in scores.items():
+        if key not in seen:
+            parts.append(f"{key}={_score_text(value)}")
+    return "；".join(parts) or "—"
+
+
+def render_markdown_gate_b(board: dict) -> str:
+    """B 闸门（方案择定）的 Markdown 视图。
+
+    与 A 板结构不同：候选带总分与维度分、每个候选给出 pros/cons 与
+    why_not/when_better，并单列多组数据对比（可比层 + 专属层 + baseline 行）。
+    """
+    questions = [question for question in board.get("questions", []) if isinstance(question, dict)]
+    confirm_code = _as_text(board.get("confirm_code"))
+    confirmed = bool(board.get("confirmed"))
+    counter = [0]
+
+    def sec(title: str) -> str:
+        index = counter[0]
+        counter[0] += 1
+        ordinal = _ORDINALS[index] if index < len(_ORDINALS) else str(index + 1)
+        return f"## {ordinal}、{title}"
+
+    lines: list[str] = [
+        f"# 建模方案决策板（B 闸门 · 方案择定） · 第 {_board_round(board)} 轮",
+        "",
+        "> **本板 = B 闸门（方案择定）**：只确认每个小问采用哪个模型；本页是选型建议，不是评委审查（评委审查在 Phase 4）。",
+        ">",
+        f"> **确认码：{confirm_code}**",
+        ">",
+        "> 运行 python tools/design_board.py confirm --workspace . --gate b --apply 时需要输入上面这 4 位确认码。",
+        ">",
+        f"> **状态**：{'✅ 已确认' if confirmed else '⏳ 待确认'}",
+    ]
+    if confirmed:
+        lines.append(
+            f"> **确认信息**：{_as_text(board.get('confirmed_at')) or '未知时间'} · by {_as_text(board.get('confirmed_by')) or '未知来源'}"
+        )
+    lines.extend([
+        ">",
+        f"> **变更摘要**：{_change_summary(board)}",
+    ])
+    problem_summary = board.get("problem_summary")
+    if isinstance(problem_summary, dict) and problem_summary.get("title"):
+        lines.append(">")
+        lines.append(f"> **题目**：{_clip(problem_summary.get('title'), 60)}")
+    lines.extend(["", "---", ""])
+
+    # 结论速览
+    lines.extend([sec("结论速览"), ""])
+    overview_rows: list[list[object]] = []
+    for question in questions:
+        advice = _advice_of(board, question)
+        candidates = _advice_candidates(advice)
+        option = _find_option(question, question.get("user_choice"))
+        if option is None:
+            overview_rows.append([_question_label(question), "（待选择）", "—", "—"])
+            continue
+        option_id = _as_text(option.get("id"))
+        candidate = candidates.get(option_id, {})
+        score = option.get("score") if option.get("score") is not None else candidate.get("score")
+        overview_rows.append([
+            _question_label(question),
+            f"**{option_id} {_as_text(option.get('name'))}**",
+            _score_text(score),
+            _verdict_text(option, candidate),
+        ])
+    lines.extend(_table(["小问", "选定方案", "总分", "建议"], overview_rows))
+    lines.extend(["", "---", ""])
+
+    # 建议与评分
+    lines.extend([
+        sec("建议与评分（不是评委结论）"),
+        "",
+        "> 分数来自建议 Agent，不是评委审查结论；你可以选任何一项，"
+        "选与建议不一致不视为异常（后续记录 diverged_from_advice）。",
+        "",
+    ])
+    rubric: dict = {}
+    for question in questions:
+        advice = _advice_of(board, question)
+        if isinstance(advice.get("scoring_rubric"), dict):
+            rubric = advice.get("scoring_rubric") or {}
+            break
+    dimensions = rubric.get("dimensions") if isinstance(rubric.get("dimensions"), list) else []
+    if dimensions:
+        rubric_rows: list[list[object]] = []
+        for dimension in dimensions:
+            if not isinstance(dimension, dict):
+                continue
+            weight = dimension.get("weight")
+            rubric_rows.append([
+                _as_text(dimension.get("id")),
+                _as_text(dimension.get("name")) or "—",
+                f"{weight:g}" if isinstance(weight, (int, float)) and not isinstance(weight, bool) else "—",
+            ])
+        lines.extend(_table(["维度", "名称", "权重"], rubric_rows))
+        lines.append("")
+
+    for question in questions:
+        advice = _advice_of(board, question)
+        candidates = _advice_candidates(advice)
+        options = _options(question)
+        lines.extend([f"### {_question_label(question)}", ""])
+        if not options:
+            lines.extend(["> 本题没有候选项（B 板要求 5–8 个候选）。", ""])
+            continue
+        score_rows: list[list[object]] = []
+        for option in options:
+            option_id = _as_text(option.get("id"))
+            candidate = candidates.get(option_id, {})
+            chosen = str(option.get("id")) == str(question.get("user_choice"))
+            name_cell = f"{option_id} {_as_text(option.get('name'))}"
+            if chosen:
+                name_cell = f"**{name_cell}** ✅"
+            score = option.get("score") if option.get("score") is not None else candidate.get("score")
+            score_rows.append([
+                name_cell,
+                _verdict_text(option, candidate),
+                _score_text(score),
+                _dimension_text(candidate, rubric),
+                _as_text(candidate.get("origin") or option.get("origin")) or "—",
+                _as_text(candidate.get("paradigm_id") or option.get("paradigm_id")) or "—",
+            ])
+        lines.extend(_table(["方案", "建议", "总分", "维度分", "来源视角", "范式"], score_rows))
+        lines.append("")
+        for option in options:
+            option_id = _as_text(option.get("id"))
+            candidate = candidates.get(option_id, {})
+            if not candidate:
+                continue
+            lines.append(
+                f"#### {option_id} {_as_text(option.get('name'))} · {_verdict_text(option, candidate)}"
+            )
+            lines.append("")
+            pros = [item for item in candidate.get("pros") or [] if _as_text(item).strip()]
+            cons = [item for item in candidate.get("cons") or [] if _as_text(item).strip()]
+            why_not = [item for item in candidate.get("why_not") or [] if _as_text(item).strip()]
+            if pros:
+                lines.append("- 优点：")
+                lines.extend(f"  - {_clip(item, 120)}" for item in pros)
+            if cons:
+                lines.append("- 缺点：")
+                lines.extend(f"  - {_clip(item, 120)}" for item in cons)
+            if why_not:
+                lines.append("- 为什么不建议：")
+                lines.extend(f"  - {_clip(item, 120)}" for item in why_not)
+            when_better = _as_text(candidate.get("when_better")).strip()
+            if when_better:
+                lines.append(f"- 什么情况下它更好：{_clip(when_better, 200)}")
+            evidence = candidate.get("evidence_refs")
+            if isinstance(evidence, list) and evidence:
+                lines.append(f"- 证据：{'、'.join(_as_text(item) for item in evidence)}")
+            lines.append("")
+        note = _as_text(advice.get("aggregate_note")).strip()
+        if note:
+            lines.extend([f"> **汇总说明**：{_clip(note, 300)}", ""])
+    lines.extend(["---", ""])
+
+    # 多组数据对比
+    lines.extend([
+        sec("多组数据对比（工具实跑）"),
+        "",
+        "> 可比层（comparable）是唯一允许横向比较的层；专属层（own）只在同一候选的不同切片之间可比。"
+        "baseline 行只作参照，不占候选名额。",
+        "",
+    ])
+    rendered_any = False
+    for question in questions:
+        advice = _advice_of(board, question)
+        raw_comparison = advice.get("data_comparison")
+        comparison = raw_comparison if isinstance(raw_comparison, dict) else {}
+        raw_rows = comparison.get("rows")
+        rows = [row for row in raw_rows if isinstance(row, dict)] if isinstance(raw_rows, list) else []
+        raw_baseline = comparison.get("baseline_row")
+        baseline = raw_baseline if isinstance(raw_baseline, dict) else None
+        if not rows and not baseline:
+            continue
+        rendered_any = True
+        lines.extend([f"### {_question_label(question)}", ""])
+        raw_columns = comparison.get("comparable_columns")
+        columns = [_as_text(item) for item in raw_columns if _as_text(item)] if isinstance(raw_columns, list) else []
+        if not columns:
+            for row in rows + ([baseline] if baseline else []):
+                comparable = row.get("comparable") if isinstance(row.get("comparable"), dict) else {}
+                for key in comparable:
+                    if key not in columns:
+                        columns.append(key)
+        slice_ids: list[str] = []
+        for row in rows + ([baseline] if baseline else []):
+            slice_id = _as_text(row.get("slice_id"))
+            if slice_id and slice_id not in slice_ids:
+                slice_ids.append(slice_id)
+        for slice_id in slice_ids:
+            slice_rows: list[list[object]] = []
+            for row in rows:
+                if _as_text(row.get("slice_id")) != slice_id:
+                    continue
+                comparable = row.get("comparable") if isinstance(row.get("comparable"), dict) else {}
+                own = row.get("own") if isinstance(row.get("own"), dict) else {}
+                slice_rows.append([
+                    _as_text(row.get("option_id")) or "—",
+                    *[_as_text(comparable.get(column)) or "—" for column in columns],
+                    "、".join(f"{key}={_as_text(value)}" for key, value in own.items()) or "—",
+                    _as_text(row.get("trials_ref")) or "—",
+                ])
+            if baseline is not None and _as_text(baseline.get("slice_id")) == slice_id:
+                comparable = baseline.get("comparable") if isinstance(baseline.get("comparable"), dict) else {}
+                slice_rows.append([
+                    f"{_as_text(baseline.get('option_id')) or 'baseline'}（参照）",
+                    *[_as_text(comparable.get(column)) or "—" for column in columns],
+                    "—",
+                    "—",
+                ])
+            lines.extend([f"**切片 {slice_id}**", ""])
+            lines.extend(_table(["候选", *columns, "专属指标（own）", "回溯"], slice_rows))
+            lines.append("")
+    if not rendered_any:
+        lines.extend([
+            "> 本板未嵌入 data_comparison：请先由 perspective_trial_runner 产出 "
+            "perspective_trials.json，再由 model_advice_builder 生成多组数据对比。",
+            "",
+        ])
+    lines.extend(["---", ""])
+
+    # 已锁定（B 板的核心：用户选定的模型）
+    lines.extend([sec("已锁定（你选定的模型）"), ""])
+    locked_questions = [question for question in questions if question.get("user_locked")]
+    if locked_questions:
+        locked_rows: list[list[object]] = []
+        for question in locked_questions:
+            option = _find_option(question, question.get("user_choice"))
+            locked_rows.append([
+                _question_label(question),
+                f"**{_as_text(option.get('id'))} {_as_text(option.get('name'))}**" if option else "（未选择）",
+                _clip(question.get("user_comment"), 40) or "—",
+            ])
+        lines.extend(_table(["小问", "选定模型", "你的批注"], locked_rows))
+    else:
+        lines.append("本板尚未锁定任何模型（所有 user_locked 均为 false）。")
+    lines.extend(["", "---", ""])
+
+    # 来源速查（B 板候选通常没有 source_ref，有才列）
+    source_rows: list[list[object]] = []
+    for question in questions:
+        for option in _options(question):
+            source_ref = option.get("source_ref") if isinstance(option.get("source_ref"), dict) else {}
+            if not source_ref:
+                continue
+            source_rows.append([
+                _question_label(question),
+                f"{_as_text(option.get('id'))} {_as_text(option.get('name'))}",
+                _as_text(source_ref.get("type")) or "—",
+                _as_text(source_ref.get("ref")) or "—",
+                _as_text(source_ref.get("tier")) or "—",
+            ])
+    if source_rows:
+        lines.extend([sec("来源速查"), ""])
+        lines.extend(_table(["小问", "方案", "来源类型", "编号", "tier"], source_rows))
+        lines.extend(["", "---", ""])
+
+    lines.append("<sub>本文件由 design_board_gate_b.json 渲染生成，不是唯一真实来源。</sub>")
+    lines.append("")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # render
 # ---------------------------------------------------------------------------
@@ -615,32 +1196,49 @@ def _load_optional_view(name: str):
     return None
 
 
-def render_board(workspace: str, fmt: str = "md") -> dict:
+def render_board(
+    workspace: str,
+    fmt: str = "md",
+    *,
+    gate: str = GATE_A,
+    board: str | None = None,
+) -> dict:
+    """渲染决策板视图（md / html / xlsx），并把哈希与确认码回写到主数据。
+
+    gate 决定全部产物文件名（契约 §3）；board 覆盖主数据路径，视图与回执由
+    该文件名派生。A 闸门的文件名、行为与文案与改造前完全一致。
+    """
     root = workspace_root(workspace)
-    board = load_board(root, for_render=True)
-    board_sha256 = compute_board_sha256(board)
+    paths = board_paths(root, gate, board)
+    payload = load_board(root, for_render=True, paths=paths)
+    board_sha256 = compute_board_sha256(payload)
     confirm_code = derive_confirm_code(board_sha256)
-    board["board_sha256"] = board_sha256
-    board["confirm_code"] = confirm_code
-    _atomic_write_json(root / BOARD_FILE, board)
+    payload["board_sha256"] = board_sha256
+    payload["confirm_code"] = confirm_code
+    _atomic_write_json(paths.board, payload)
 
     targets = SUPPORTED_FORMATS[:-1] if fmt == "all" else (fmt,)
     written: list[str] = []
     skipped: list[str] = []
 
     if "md" in targets:
-        md_path = root / MD_FILE
-        _atomic_write_text(md_path, render_markdown(board))
-        written.append(str(md_path))
+        _atomic_write_text(paths.markdown, render_markdown(payload, gate=paths.gate))
+        written.append(str(paths.markdown))
 
     if "html" in targets:
         html_module = _load_optional_view("html")
         if html_module is None:
             skipped.append("html: 缺少 tools/design_board_html.py")
         else:
-            html_path = root / HTML_FILE
-            _atomic_write_text(html_path, html_module.render_html(board))
-            written.append(str(html_path))
+            _atomic_write_text(
+                paths.html,
+                html_module.render_html(
+                    payload,
+                    gate=paths.gate,
+                    submission_name=paths.submission.name,
+                ),
+            )
+            written.append(str(paths.html))
 
     if "xlsx" in targets:
         xlsx_module = _load_optional_view("xlsx")
@@ -648,7 +1246,9 @@ def render_board(workspace: str, fmt: str = "md") -> dict:
             skipped.append("xlsx: 缺少 tools/design_board_xlsx.py")
         else:
             try:
-                written.append(str(xlsx_module.render_xlsx(board, root / XLSX_FILE)))
+                written.append(
+                    str(xlsx_module.render_xlsx(payload, paths.xlsx, gate=paths.gate))
+                )
             except RuntimeError as exc:  # 缺 openpyxl
                 skipped.append(f"xlsx: {exc}")
 
@@ -661,6 +1261,10 @@ def render_board(workspace: str, fmt: str = "md") -> dict:
         "board_sha256": board_sha256,
         "confirm_code": confirm_code,
     }
+    if paths.gate != GATE_A:
+        # A 闸门的输出键集保持改造前原样，B 板额外标出闸门与产物路径。
+        result["gate"] = paths.gate
+        result["paths"] = paths.as_dict()
     if skipped:
         result["skipped"] = skipped
     return result
@@ -857,9 +1461,17 @@ def _parse_board_submission(raw: dict, board: dict, changes: list[dict]) -> tupl
     return decisions, comments, origin, nonce
 
 
-def ingest_submission(workspace: str, source: str) -> dict:
+def ingest_submission(
+    workspace: str,
+    source: str,
+    *,
+    gate: str = GATE_A,
+    board: str | None = None,
+) -> dict:
+    """读回执并落盘到该闸门的回执目录。"""
     root = workspace_root(workspace)
-    board = load_board(root)
+    paths = board_paths(root, gate, board)
+    payload = load_board(root, paths=paths)
     submission_path = _resolve_submission(root, source)
 
     # xlsx 回读：用户在 Excel 里改了「当前选择」/「批注」，先转成回执信封再走同一套流程。
@@ -867,7 +1479,7 @@ def ingest_submission(workspace: str, source: str) -> dict:
         xlsx_module = _load_optional_view("xlsx")
         if xlsx_module is None:
             raise ValueError("回读 xlsx 需要 tools/design_board_xlsx.py")
-        raw = xlsx_module.read_submission_xlsx(submission_path, board)
+        raw = xlsx_module.read_submission_xlsx(submission_path, payload)
         if not isinstance(raw, dict):
             raise ValueError(f"xlsx 回读结果必须是对象: {submission_path}")
     else:
@@ -875,17 +1487,24 @@ def ingest_submission(workspace: str, source: str) -> dict:
     if not isinstance(raw, dict):
         raise ValueError(f"用户提交必须是 JSON 对象或 xlsx: {submission_path}")
 
-    return apply_submission(root, raw, board=board)
+    return apply_submission(root, raw, board=payload, paths=paths)
 
 
-def apply_submission(root: Path, raw: dict, *, board: dict | None = None) -> dict:
+def apply_submission(
+    root: Path,
+    raw: dict,
+    *,
+    board: dict | None = None,
+    paths: BoardPaths | None = None,
+) -> dict:
     """把一份**已解析**的回执对象落盘（JSON 回执、xlsx 回读、HTTP POST 共用这条路径）。
 
     所有入口共用同一套校验与落盘逻辑，避免"网页提交绕过校验"这类分叉：
-    `serve` 收到 POST 后也只调这里，不自己写 `design_rounds/` 或 `design_board.json`。
+    `serve` 收到 POST 后也只调这里，不自己写回执目录或主数据。
     """
+    paths = paths or board_paths(root)
     if board is None:
-        board = load_board(root)
+        board = load_board(root, paths=paths)
 
     changes: list[dict] = []
     if isinstance(raw.get("decisions"), list):
@@ -899,7 +1518,7 @@ def apply_submission(root: Path, raw: dict, *, board: dict | None = None) -> dic
 
     _apply_question_updates(board, decisions, comments, changes)
 
-    round_files = list_round_files(root)
+    round_files = list_round_files(root, paths)
     round_number = (round_files[-1][0] if round_files else 0) + 1
     at = now_local_iso()
     user_edited = bool(changes)
@@ -931,11 +1550,11 @@ def apply_submission(root: Path, raw: dict, *, board: dict | None = None) -> dic
         "receipt_origin": origin,
         "receipt_nonce": nonce,
     }
-    round_path = rounds_dir(root) / f"round_{round_number:03d}.json"
+    round_path = rounds_dir(root, paths) / f"round_{round_number:03d}.json"
     _atomic_write_json(round_path, round_payload)
-    _atomic_write_json(root / BOARD_FILE, board)
+    _atomic_write_json(paths.board, board)
 
-    return {
+    result = {
         "action": "ingest",
         "workspace": str(root),
         "board_id": _as_text(board.get("board_id")),
@@ -948,6 +1567,9 @@ def apply_submission(root: Path, raw: dict, *, board: dict | None = None) -> dic
         "receipt_origin": origin,
         "receipt_nonce": nonce,
     }
+    if paths.gate != GATE_A:
+        result["gate"] = paths.gate
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -960,8 +1582,8 @@ def _round_detail(round_files: list[tuple[int, Path]], index: int) -> str:
     return f"round_{number:03d}.json"
 
 
-def evaluate_readiness(root: Path, board: dict) -> dict:
-    round_files = list_round_files(root)
+def evaluate_readiness(root: Path, board: dict, paths: BoardPaths | None = None) -> dict:
+    round_files = list_round_files(root, paths)
     checks: list[dict] = []
     blocking: list[str] = []
 
@@ -988,7 +1610,8 @@ def evaluate_readiness(root: Path, board: dict) -> dict:
         last_detail = f"最后一轮 {_round_detail(round_files, -1)} 的 user_edited=false"
     elif not round_files:
         last_round_ok = False
-        last_detail = "缺少 design_rounds/round_NNN.json 回执"
+        rounds_name = (paths.rounds.name if paths is not None else ROUNDS_DIR)
+        last_detail = f"缺少 {rounds_name}/round_NNN.json 回执"
     elif last_error:
         last_round_ok = False
         last_detail = f"最后一轮回执读取失败：{last_error}"
@@ -1057,12 +1680,13 @@ def evaluate_readiness(root: Path, board: dict) -> dict:
     }
 
 
-def board_status(workspace: str) -> dict:
+def board_status(workspace: str, *, gate: str = GATE_A, board: str | None = None) -> dict:
     root = workspace_root(workspace)
-    board = load_board(root)
-    readiness = evaluate_readiness(root, board)
+    paths = board_paths(root, gate, board)
+    payload = load_board(root, paths=paths)
+    readiness = evaluate_readiness(root, payload, paths)
     questions: list[dict] = []
-    for question in board.get("questions", []):
+    for question in payload.get("questions", []):
         if not isinstance(question, dict):
             continue
         option = _find_option(question, question.get("user_choice"))
@@ -1072,20 +1696,25 @@ def board_status(workspace: str) -> dict:
             "option_name": _as_text(option.get("name")) if option else None,
             "confirmed": bool(question.get("confirmed")),
         })
-    pending = board.get("pending_decisions")
-    return {
+    pending = payload.get("pending_decisions")
+    result = {
         "action": "status",
         "workspace": str(root),
-        "board_id": _as_text(board.get("board_id")),
-        "revision": board.get("revision", 0),
-        "confirmed": bool(board.get("confirmed")),
-        "no_change_rounds": board.get("no_change_rounds", 0),
+        "board_id": _as_text(payload.get("board_id")),
+        "revision": payload.get("revision", 0),
+        "confirmed": bool(payload.get("confirmed")),
+        "no_change_rounds": payload.get("no_change_rounds", 0),
         "pending_decisions": pending if isinstance(pending, list) else [],
         "questions": questions,
-        "confirm_code": _as_text(board.get("confirm_code")),
+        "confirm_code": _as_text(payload.get("confirm_code")),
         "rounds": len(readiness["round_files"]),
         "ready_to_confirm": readiness["ready"],
     }
+    if paths.gate != GATE_A:
+        result["gate"] = paths.gate
+        result["board"] = str(paths.board)
+        result["rounds_dir"] = str(paths.rounds)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1135,10 +1764,20 @@ def _prompt_confirm_code() -> str:
         raise ValueError("用户取消输入确认码，未写入任何确认字段") from None
 
 
-def confirm_board(workspace: str, apply: bool = False, skip_interactive: bool = False, reason: str = "") -> dict:
+def confirm_board(
+    workspace: str,
+    apply: bool = False,
+    skip_interactive: bool = False,
+    reason: str = "",
+    *,
+    gate: str = GATE_A,
+    board: str | None = None,
+) -> dict:
+    """确认闸门；B 板与 A 板各自独立，语义（TTY 硬检查 / 留痕 / CI）完全一致。"""
     root = workspace_root(workspace)
-    board = load_board(root)
-    readiness = evaluate_readiness(root, board)
+    paths = board_paths(root, gate, board)
+    board = load_board(root, paths=paths)
+    readiness = evaluate_readiness(root, board, paths)
     confirm_code = _as_text(board.get("confirm_code"))
 
     result: dict = {
@@ -1214,7 +1853,7 @@ def confirm_board(workspace: str, apply: bool = False, skip_interactive: bool = 
     board["confirm_attested"] = confirmed_attested
     if skip_interactive and reason:
         board["skip_reason"] = reason
-    _atomic_write_json(root / BOARD_FILE, board)
+    _atomic_write_json(paths.board, board)
 
     result.update({
         "confirmed": True,
@@ -1227,6 +1866,8 @@ def confirm_board(workspace: str, apply: bool = False, skip_interactive: bool = 
         result["warning"] = "confirm_not_attested"
         if reason:
             result["reason"] = reason
+    if paths.gate != GATE_A:
+        result["gate"] = paths.gate
     return result
 
 
@@ -1240,34 +1881,6 @@ def confirm_board(workspace: str, apply: bool = False, skip_interactive: bool = 
 # ---------------------------------------------------------------------------
 
 
-def serve_board(
-    workspace: str,
-    *,
-    port: int = DEFAULT_SERVE_PORT,
-    host: str = "127.0.0.1",
-    open_browser: bool = True,
-    once: bool = False,
-) -> dict:
-    """起一个只监听本机的 HTTP 服务，把决策板页面和回执通道一起提供。
-
-    设计要点（都是踩过的坑，不要简化掉）：
-
-    1. **只绑 127.0.0.1**：板上写的是用户的建模决策，不该暴露到局域网。
-    2. **POST 必须带 `X-MM-Token` 头**：页面里注入一次性随机 token，服务端校验。
-       这挡住"恶意网页用表单 POST 到 localhost 伪造回执"——跨源表单发不出自定义头。
-    3. **页面每次请求现渲染**：改过 `design_board.json` 后刷新就能看到最新态，不会读到陈旧 HTML。
-    4. **回执走 `apply_submission()`**：与命令行 `ingest` 同一条校验路径，网页提交不能绕过任何规则。
-    5. **`--once` 模式**：收到第一份回执就返回，方便脚本化与测试；默认是常驻服务。
-    """
-    root = workspace_root(workspace)
-    if not (root / BOARD_FILE).is_file():
-        raise ValueError(f"{root} 下没有 {BOARD_FILE}，请先运行 render")
-    if not 0 <= port <= 65535:
-        raise ValueError(f"端口不合法: {port}")
-
-    token = secrets.token_urlsafe(24)
-    state: dict = {"stopped": False, "submissions": 0, "last_result": None}
-
 def build_serve_server(
     root: Path,
     token: str,
@@ -1276,11 +1889,13 @@ def build_serve_server(
     host: str = "127.0.0.1",
     port: int = DEFAULT_SERVE_PORT,
     once: bool = False,
+    paths: BoardPaths | None = None,
 ):
     """构造 (http_server, handler, url)；抽出来是为了让测试能在进程内起服务。"""
-    if not (root / BOARD_FILE).is_file():
-        raise ValueError(f"{root} 下没有 {BOARD_FILE}，请先运行 render")
-    handler = build_serve_handler(root, token, state, once=once)
+    paths = paths or board_paths(root)
+    if not paths.board.is_file():
+        raise ValueError(f"{root} 下没有 {paths.board_name}，请先运行 render")
+    handler = build_serve_handler(root, token, state, once=once, paths=paths)
     http_server = ThreadingHTTPServer((host, port), handler)
     actual_port = http_server.server_address[1]
     return http_server, handler, f"http://{host}:{actual_port}/"
@@ -1292,12 +1907,15 @@ def build_serve_handler(
     state: dict,
     *,
     once: bool = False,
+    paths: BoardPaths | None = None,
 ):
-    """构造回传服务的请求处理器类（把 root/token/state 闭包进去）。
+    """构造回传服务的请求处理器类（把 root/token/state/paths 闭包进去）。
 
     单独拆出来是为了让测试能在**进程内**起服务（`port=0` 拿随机端口），
-    不必启动子进程、也不必靠 sleep 猜测何时就绪。
+    不必启动子进程、也不必靠 sleep 猜测何时就绪。paths 决定读哪块板、把回执
+    写到哪个回执目录（A：design_rounds/，B：design_rounds_gate_b/）。
     """
+    paths = paths or board_paths(root)
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "design-board"
@@ -1325,11 +1943,15 @@ def build_serve_handler(
         def _render_page(self) -> str:
             """现渲染 HTML 并注入本次会话的 token。缺 html 模块时退回 md 的纯文本包装。"""
             html_module = _load_optional_view("html")
-            board = load_board(root)
+            board = load_board(root, paths=paths)
             if html_module is not None:
-                html_text = html_module.render_html(board)
+                html_text = html_module.render_html(
+                    board,
+                    gate=paths.gate,
+                    submission_name=paths.submission.name,
+                )
             else:
-                escaped = html.escape(render_markdown(board))
+                escaped = html.escape(render_markdown(board, gate=paths.gate))
                 html_text = (
                     "<!DOCTYPE html><html lang=\"zh-CN\"><meta charset=\"utf-8\">"
                     "<title>建模方案决策板</title><body><pre>"
@@ -1346,18 +1968,19 @@ def build_serve_handler(
         def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler 约定
             path = self.path.split("?", 1)[0]
             try:
-                if path in ("/", "/index.html", f"/{HTML_FILE}"):
+                if path in ("/", "/index.html", f"/{paths.html.name}"):
                     self._send_html(200, self._render_page())
                 elif path == "/api/ping":
-                    board = load_board(root)
+                    board = load_board(root, paths=paths)
                     self._send_json(200, {
                         "ok": True,
+                        "gate": paths.gate,
                         "board_id": _as_text(board.get("board_id")),
                         "confirm_code": _as_text(board.get("confirm_code")),
                         "confirmed": _board_confirmed(board),
                     })
                 elif path == "/api/board":
-                    self._send_json(200, load_board(root))
+                    self._send_json(200, load_board(root, paths=paths))
                 else:
                     self._send_json(404, {"ok": False, "error": f"未知路径: {path}"})
             except Exception as exc:  # 服务端不能因为一次坏请求就退栈
@@ -1395,7 +2018,7 @@ def build_serve_handler(
                 return
             raw.setdefault("receipt_origin", "browser-submit")
             try:
-                result = apply_submission(root, raw)
+                result = apply_submission(root, raw, paths=paths)
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
                 return
@@ -1417,6 +2040,8 @@ def serve_board(
     host: str = "127.0.0.1",
     open_browser: bool = True,
     once: bool = False,
+    gate: str = GATE_A,
+    board: str | None = None,
 ) -> dict:
     """起一个只监听本机的 HTTP 服务，把决策板页面和回执通道一起提供。
 
@@ -1425,20 +2050,22 @@ def serve_board(
     1. **只绑 127.0.0.1**：板上写的是用户的建模决策，不该暴露到局域网。
     2. **POST 必须带 `X-MM-Token` 头**：页面里注入一次性随机 token，服务端校验。
        这挡住"恶意网页用表单 POST 到 localhost 伪造回执"——跨源表单发不出自定义头。
-    3. **页面每次请求现渲染**：改过 `design_board.json` 后刷新就能看到最新态。
+    3. **页面每次请求现渲染**：改过主数据后刷新就能看到最新态。
     4. **回执走 `apply_submission()`**：与命令行 `ingest` 同一条校验路径，网页提交绕不过规则。
     5. **`--once` 模式**：收到第一份回执就返回，方便脚本化与测试；默认常驻。
+    6. **按闸门分流**：A 板回执进 design_rounds/，B 板进 design_rounds_gate_b/。
     """
     root = workspace_root(workspace)
-    if not (root / BOARD_FILE).is_file():
-        raise ValueError(f"{root} 下没有 {BOARD_FILE}，请先运行 render")
+    paths = board_paths(root, gate, board)
+    if not paths.board.is_file():
+        raise ValueError(f"{root} 下没有 {paths.board_name}，请先运行 render")
     if not 0 <= port <= 65535:
         raise ValueError(f"端口不合法: {port}")
 
     token = secrets.token_urlsafe(24)
     state: dict = {"stopped": False, "submissions": 0, "last_result": None}
     http_server, _handler, url = build_serve_server(
-        root, token, state, host=host, port=port, once=once
+        root, token, state, host=host, port=port, once=once, paths=paths
     )
     actual_port = http_server.server_address[1]
 
@@ -1449,8 +2076,10 @@ def serve_board(
         "port": actual_port,
         "host": host,
         "once": once,
-        "note": "按 Ctrl+C 停止；回执写入 design_rounds/，不会自动 confirm",
+        "note": f"按 Ctrl+C 停止；回执写入 {paths.rounds.name}/，不会自动 confirm",
     }
+    if paths.gate != GATE_A:
+        info["gate"] = paths.gate
     print(json.dumps(info, ensure_ascii=False, indent=2), flush=True)
 
     if open_browser and not once:
@@ -1466,7 +2095,7 @@ def serve_board(
     finally:
         http_server.server_close()
 
-    return {
+    result = {
         "action": "serve",
         "workspace": str(root),
         "url": url,
@@ -1475,6 +2104,9 @@ def serve_board(
         "last_result": state["last_result"],
         "stopped": True,
     }
+    if paths.gate != GATE_A:
+        result["gate"] = paths.gate
+    return result
 
 
 
@@ -1489,26 +2121,45 @@ def _board_confirmed(board: dict) -> bool:
     return False
 
 
+def _add_gate_args(parser: argparse.ArgumentParser) -> None:
+    """给每个子命令加统一的 --gate / --board（契约 §8.1）。"""
+    parser.add_argument(
+        "--gate",
+        default=GATE_A,
+        choices=list(GATES),
+        help="闸门：a=框架与探索边界（默认），b=方案择定",
+    )
+    parser.add_argument(
+        "--board",
+        default=None,
+        help="覆盖主数据路径（视图与回执目录由该文件名派生）",
+    )
+
+
 def main():
-    parser = argparse.ArgumentParser(description="数学建模决策板工具")
+    parser = argparse.ArgumentParser(description="数学建模决策板工具（双闸门）")
     subparsers = parser.add_subparsers(dest="action")
 
     p_render = subparsers.add_parser("render", help="渲染决策板为 Markdown 并回写哈希与确认码")
     p_render.add_argument("--workspace", required=True)
     p_render.add_argument("--format", default="md", choices=list(SUPPORTED_FORMATS))
+    _add_gate_args(p_render)
 
-    p_ingest = subparsers.add_parser("ingest", help="读入用户回执，写 design_rounds/round_NNN.json")
+    p_ingest = subparsers.add_parser("ingest", help="读入用户回执，写回执目录 round_NNN.json")
     p_ingest.add_argument("--workspace", required=True)
     p_ingest.add_argument("--from", dest="source", required=True, help="用户提交的 JSON 路径")
+    _add_gate_args(p_ingest)
 
     p_status = subparsers.add_parser("status", help="输出轮次、收敛进度、待决项与确认码")
     p_status.add_argument("--workspace", required=True)
+    _add_gate_args(p_status)
 
     p_confirm = subparsers.add_parser("confirm", help="检查收敛判据；--apply 时写入确认字段")
     p_confirm.add_argument("--workspace", required=True)
     p_confirm.add_argument("--apply", action="store_true", help="实际写入确认字段（默认 dry-run）")
     p_confirm.add_argument("--skip-interactive", action="store_true", help="跳过确认码交互（会记 confirm_not_attested）")
     p_confirm.add_argument("--reason", default="", help="配合 --skip-interactive 记录跳过原因")
+    _add_gate_args(p_confirm)
 
     p_serve = subparsers.add_parser("serve", help="起本地回传服务器（页面提交回执 + 下载 JSON 兜底）")
     p_serve.add_argument("--workspace", required=True)
@@ -1516,6 +2167,7 @@ def main():
     p_serve.add_argument("--host", default="127.0.0.1", help="监听地址（默认只绑本机）")
     p_serve.add_argument("--no-browser", action="store_true", help="不要自动打开浏览器")
     p_serve.add_argument("--once", action="store_true", help="收到第一份回执后退出（便于脚本化/测试）")
+    _add_gate_args(p_serve)
 
     args = parser.parse_args()
     if not args.action:
@@ -1527,11 +2179,11 @@ def main():
     try:
         exit_code = 0
         if args.action == "render":
-            result = render_board(args.workspace, args.format)
+            result = render_board(args.workspace, args.format, gate=args.gate, board=args.board)
         elif args.action == "ingest":
-            result = ingest_submission(args.workspace, args.source)
+            result = ingest_submission(args.workspace, args.source, gate=args.gate, board=args.board)
         elif args.action == "status":
-            result = board_status(args.workspace)
+            result = board_status(args.workspace, gate=args.gate, board=args.board)
         elif args.action == "serve":
             result = serve_board(
                 args.workspace,
@@ -1539,9 +2191,18 @@ def main():
                 host=args.host,
                 open_browser=not args.no_browser,
                 once=args.once,
+                gate=args.gate,
+                board=args.board,
             )
         else:
-            result = confirm_board(args.workspace, args.apply, args.skip_interactive, args.reason)
+            result = confirm_board(
+                args.workspace,
+                args.apply,
+                args.skip_interactive,
+                args.reason,
+                gate=args.gate,
+                board=args.board,
+            )
             if not args.apply:
                 exit_code = 0 if result["ready_to_confirm"] else 1
         output(result)

@@ -82,7 +82,15 @@ Phase 0 完成后进入本阶段。目标是让用户在写任何代码之前看
 }
 ```
 
-字段要求（`design_board_checker.py` 逐条校验，不要自创字段）：每题至少 2 个 `options`，每个 option 必须带 `rationale`、`source_ref`（含 `tier` 与 `verified`）、`complexity`、`dependencies`、`risk`、`mini_trial`；`source_ref.verified` 为 `false` 时必须补 `unverified_reason`（不允许"假装查过"）；`user_choice` 必须是该题某个 option 的 `id`，用户锁定后置 `user_locked: true` 并写 `user_comment`；`confirmed: true` 时 `confirmed_at` / `confirmed_by` / `receipt_origin` / `confirm_code` / `confirm_attested` 必须齐全。
+字段要求（`design_board_checker.py --gate a` 逐条校验，不要自创字段）：
+
+- `schema_version: 2`；每题必须有 `paradigm_set`（3–5 项）与 `paradigm_selection`（≥2 项，含 ≥1 个异质族）。
+- 每个范式：`paradigm_id`、`name`、`family`、`source_ref`（含 `tier` 与 `verified`）、`why_explore`、`explore_cost.level ∈ {low,medium,high}` + `note`；`source_ref.verified=false` 必须补 `unverified_reason`。
+- `options` **允许为空数组**（A 板不再承载模型候选）；`user_choice` 允许 `null`；`user_locked` **必须为 false**（否则 `gate_a_user_locked_forbidden`）。
+- `options` 非空时按旧规则校验（`rationale`/`source_ref`/`risk`；`mini_trial` 已改为可选）。
+- `confirmed: true` 时 `confirmed_at` / `confirmed_by` / `receipt_origin` / `confirm_code` / `confirm_attested` 必须齐全。
+
+> B 板的字段见 §1.5.2。两块板共用同一套 `render/serve/ingest/status/confirm`，只是文件名与回执目录不同（`--gate a|b`）。
 
 ### 0.5.3 design_rounds/round_NNN.json
 
@@ -96,9 +104,9 @@ Phase 0 完成后进入本阶段。目标是让用户在写任何代码之前看
 
 `user_edited` 与 `changes` 是判断"用户到底改没改"的客观依据，`ingest` 据此自动维护 `no_change_rounds`（未修改则 +1，修改则清零）。
 
-### 0.5.4 mini_trials.json
+### 0.5.4 mini_trials.json（A 板可选；B 闸门改用 perspective_trials.json）
 
-每个候选算法的真实试算证据，不是口头声明：
+A 闸门阶段还没有"最终候选"，因此 `mini_trial` 由必填降为**可选**：有真实试算更好，没有不阻断。B 闸门的证据改用 §1.5.4 的 `perspective_trials.json`（只能由 `tools/perspective_trial_runner.py` 写入）。若仍要记录 A 阶段的小样本试算：
 
 ```json
 {"trials": [{"question_id": "Q1", "option_id": "O1", "sample_rows": 20, "input_hash": "sha256:...",
@@ -114,7 +122,7 @@ Phase 0 完成后进入本阶段。目标是让用户在写任何代码之前看
 1. 存在 `design_rounds/round_NNN.json`，且最后一轮 `user_edited == false`。
 2. `no_change_rounds >= 2`（连续两轮用户未修改）。
 3. `board_sha256` 与当前 `design_board.json` 内容一致。
-4. 每题 `user_choice` 非空，且 `pending_decisions == []`。
+4. A 板：每题 `paradigm_selection` 非空（≥2 项，含异质族）、`user_locked` 为 false、`pending_decisions == []`；B 板：每题 `user_choice` 非空且 `pending_decisions == []`。
 5. `confirm --apply` 时输入的 4 位确认码与 `render` 写入视图的确认码一致。
 
 ### 0.5.6 design_board.py 子命令
@@ -155,15 +163,25 @@ python "tools/design_board.py" confirm --workspace "." --apply
 
 ### 0.5.9 时间线校验（防"先写代码、后补板"）
 
-`design_board_checker.py` 校验 `solution.py`、`solution_tests.py` 与 `results/` 下代码和结果文件的 mtime **不得早于** `confirmed_at`（容差 5 秒），否则报 `code_written_before_confirm`（error）。若确认后确实需要一次小修，可在 `design_rounds/` 追加一条 `post_confirm_edit` 记录（说明改了什么、为何不属于方案变更），checker 见到即放行并标 warning。局限：mtime 可被 `os.utime` 伪造，这不是绝对防线，但与 `board_sha256` 绑定叠加后伪造成本显著上升。夹具目录（`tests/test_data`、`examples/solved-python`、`examples/design-board-sample`）自动豁免，或加 `--skip-timeline` 跳过。
+**双时间线**（两板各自一条）：
+
+- `--gate a`：`solution.*` / `solution_tests.*` / `results/` 的 mtime 不得早于 **A 板** `confirmed_at`，否则 `code_written_before_gate_a`（旧板 schema<2 仍报 `code_written_before_confirm`，保持兼容）。
+- `--gate b`：交付代码的 mtime 不得早于 **B 板** `confirmed_at`，否则 `code_written_before_gate_b`。
+- **缺板 + 已有交付代码 = error**：板不在场时不得把这条降级为 `skipped`（旧实现会，这是最大的降级陷阱）。
+- `perspective_trials/**` 属试算代码，**永不计入**交付代码时间线（它是 B 闸门之前允许存在的证据）。
+
+容差 5 秒。原来的单闸门描述保留如下（历史口径）：若确认后确实需要一次小修，可在 `design_rounds/` 追加一条 `post_confirm_edit` 记录（说明改了什么、为何不属于方案变更），checker 见到即放行并标 warning。局限：mtime 可被 `os.utime` 伪造，这不是绝对防线，但与 `board_sha256` 绑定叠加后伪造成本显著上升。夹具目录（`tests/test_data`、`examples/solved-python`、`examples/design-board-sample`）自动豁免，或加 `--skip-timeline` 跳过。
 
 ### 0.5.10 交叉校验（板与模型选择审计对账）
 
-`design_board_checker.py` 还要把 `design_board.json` 与 `model_selection_audit.json` 对账：
+对账按闸门拆开（`schema_version >= 2` 之后）：
 
-1. `user_choice` 对应 option 的 `name` 必须能匹配审计的 `final_selection.name`，否则 `board_audit_selection_mismatch`。
-2. 板里候选名集合与审计的 `candidates[].name` 集合至少有一对能匹配，否则 `board_audit_candidate_mismatch`。
-3. 已确认但缺 `model_selection_audit.json`：`excellence` 报 `board_audit_missing`（error），`standard` 报 warning。
+- **A 组**：只报 `paradigm_audit_pending`（warning）并跳过候选对账——A 板确认时 `model_selection_audit.json` 还没产出，拿它来对账必然是假阴性。旧板（schema<2）仍走原三条规则，行爲不变。
+- **B 组**：把 `design_board_gate_b.json` 与 `model_selection_audit.json` 对账：
+  1. `user_choice` 对应 option 的 `name` 必须能匹配审计的 `final_selection.name`，否则 `board_audit_selection_mismatch`；
+  2. B 板候选名与审计 `candidates[].name` 至少一对能匹配，否则 `board_audit_candidate_mismatch`；
+  3. 已确认但缺审计：`excellence` 报 `board_audit_missing`（error），`standard` 报 warning；
+  4. 审计 `selected_by != "user"` 或 `user_choice_id` 与板不一致 → `board_audit_selection_mismatch`（裁决 Agent 必须采用用户选择）。
 
 匹配采用归一化后的**双向包含**比对（去括号内容、小写、去空格与连字符），避免"整数线性规划 (ILP)"与"整数规划"被误判不一致；无法匹配时不猜，直接报失败码并列出双方名称。旧工作区迁移期可加 `--no-cross-audit` 跳过这三条规则（输出标 `cross_audit: skipped`）。
 
@@ -178,12 +196,17 @@ python "tools/design_board.py" confirm --workspace "." --apply
 
 前三层（产物结构 / 哈希与确认码 / 时间线）都在 skill 内部，第 4–5 层需要宿主配合：
 
-- `hooks/pre_tool_use_guard.py`：在宿主调用写文件工具时拦截，若目标是被保护的 `solution.*` / `solution_tests.*` 而所在工作区还没有已确认的 `design_board.json`，则拒绝。支持 Claude Code（JSON `deny`）与 Cursor（exit 2）两种协议；`MM_GATE_BYPASS=1` 可旁路并留 warning。
+- `hooks/pre_tool_use_guard.py`：在宿主调用写文件工具时拦截。判定顺序：
+  1. 目标在 `perspective_trials/` 下 → 放行（试算代码不是交付代码）；
+  2. 目标是交付代码且路径含 `questions/<qid>/` → 必须有该问已确认的 `design_board_gate_b.json`；
+  3. 其余交付代码（工作区根）→ A 板必须确认；若 A 板 `schema_version >= 2`，还要求同级 `design_board_gate_b.json` 已确认；
+  4. legacy（A 板 schema<2 且无 B 板）→ 放行 + warning。
+  支持 Claude Code（JSON `deny`）与 Cursor（exit 2）两种协议；`MM_GATE_BYPASS=1` 可旁路并留 warning。
 - 安装方式见 `hooks/README.md`。**它拦不住**用 shell 重定向写文件、用户自己手写、或宿主不支持 hook——所以它是"提高伪造成本 + 留痕"，不是"证明人确认过"。
 
 ## Phase 1: 并行建模共识
 
-Phase 1 的输入除 `problem_brief.md` 与题意审计产物外，还必须包含 Phase 0.5 产出的 `design_board.json`：五个建模 Agent 的 prompt 中必须注入其中 `user_locked: true` 的用户选择，不得推翻；若要推翻，必须回到 Phase 0.5 重新走一轮。
+Phase 1 的输入除 `problem_brief.md` 与题意审计产物外，还必须包含 Phase 0.5 产出的 `design_board.json`：五个建模 Agent 的 prompt 中只注入**探索边界**（每题 `paradigm_selection` 与各范式 `family`），**不得注入任何模型选择**——A 板不再承载选型，`user_locked` 恒为 false。若某视角认为该范式集合本身不成立，走 `reopen_gate_request.json`（`gate: "a"`）回到 Phase 0.5 重开，而不是就地换框架。
 
 Phase 1 必须使用五视角建模 Agent。必须先生成 `problem_taxonomy`，再由资料库检索 Agent 读取 `references/competition_sources.json` 和 `references/award_playbook.md`，输出 `case_retrieval.json`，列出相似题型、可借鉴模型、推荐验证和不能照搬的风险。五个 Agent 并行生成方案时必须参考 `case_retrieval.json`，但不得直接套用不匹配模型。按题型最多追加 3 个动态专家 Agent，随后并行批评、并行修正，再由创新筛选 Agent 和最终裁决 Agent 选定方案。本阶段输出 `baseline_solution.json`、`case_retrieval.json`、`model_selection_audit.json`、`model_spec.json`、`solver_strategy.json`、`optimization_certificate.json`、`uncertainty_budget.json`、`validation_profile.json`、`ablation_study.json`、`innovation_register.json`、`final_solution.json` 与 `model_decision.md`，不生成正式写作正文。
 
@@ -365,6 +388,121 @@ Phase 1 必须使用五视角建模 Agent。必须先生成 `problem_taxonomy`�
   }
 }
 ```
+
+## Phase 1.5: 方案择定闸门（B 闸门）
+
+Phase 1 的五视角并行、批评、修正完成后进入本阶段。**主仓库形态是一块 B 板覆盖全部小问、一次确认**（分支 `math-modeling-per-question` 是每问一块板、逐问确认，字段与命令完全同构）。本阶段只回答一个问题：**这一题用哪个模型**。
+
+> 两件事不要混：B 闸门的"建议 Agent 打分"是选型建议（`is_judge_panel: false`）；多评委审查在 Phase 4，审的是代码与结果。
+
+### 1.5.1 建议 Agent（1 建议 + 其余不建议）
+
+**输入**：`agent_outputs/initial_*.json`、`revised_*.json`、`critique_*.json`、`baseline_solution.json`、`case_retrieval.json`、`problem_taxonomy.json`、`innovation_register.json`、**`perspective_trials.json`（唯一数值来源）**。
+
+**输出**：`model_advice.json`（schema 2，格式见 `references/templates.md`）。
+
+硬性规则（逐条对应 checker issue code）：
+
+1. `advice_one_recommended`：恰好 1 个 `verdict: "recommended"`，其余全部 `not_recommended`，且 `recommended_option_id` 与之一致。
+2. `advice_candidates_count`：候选 5–8 个（五视角至少 5 个；追加动态专家最多 8 个）；baseline 只作参照行，不占名额。
+3. `advice_scores_complete`：全部候选都有 0–100 的 `score`，`dimension_scores` 的键集合与 `scoring_rubric.dimensions[].id` 一致。
+4. `advice_pros_cons`：每个候选 `pros`/`cons` 各 ≥2 条。
+5. `advice_why_not_when_better`：每个不推荐项 `why_not` ≥2 条 + `when_better` 非空（"什么条件下它反而更好"）。
+6. `advice_data_comparison`：≥2 个 slice，每个 slice 覆盖**全部候选**；`comparable` 键跨候选一致。
+7. `advice_trials_ref_valid` + `advice_number_mismatch`：每一行数据都能按 `(option_id, slice_id)` 回溯到 `perspective_trials.json` 的某次 run，且数值一致（容差 1e-9）。**数字不得手改。**
+8. `advice_is_not_judge_panel` + `advice_no_judge_wording`：必须 `is_judge_panel: false` + `disclaimer`，且不得出现"评委通过/评审结论"类措辞。
+
+建议 Agent **不得**替用户选择：`user_choice` 只能由 `ingest` 写入。
+
+### 1.5.2 B 板（design_board_gate_b.json）
+
+B 板复用 A 板 `questions[] / options[]` 形状，额外带 `advice` 与 `advice_sha256`：
+
+```json
+{
+  "schema_version": 2, "gate": "b", "question_scope": "problem",
+  "board_id": "gb-YYYY-MM-DD-xxxx", "board_sha256": "...",
+  "advice_ref": "model_advice.json", "advice_sha256": "...",
+  "questions": [{
+    "id": "Q1", "goal": "...",
+    "options": [{"id": "O1", "name": "...", "verdict": "recommended", "score": 86.5,
+                 "origin": "perspective:statistician", "paradigm_id": "P1"}],
+    "advice": {"candidates": [], "data_comparison": {}, "scoring_rubric": {}},
+    "user_choice": "O1", "user_locked": true, "user_comment": "", "confirmed": false
+  }],
+  "pending_decisions": [], "no_change_rounds": 0
+}
+```
+
+- `options` 5–8 个，与 `advice.candidates[].option_id` 一一对应；
+- `advice_sha256` 必须等于 `model_advice.json` 的字节哈希（不一致 → `advice_board_mismatch`）；
+- `user_choice` 必须是某个 option 的 `id`；未选 → `user_choice_present`（excellence error）；
+- `preauthorized: true`（按建议自动执行）在 excellence 下判 `preauthorized_not_attested`（error），standard 仅留痕。
+
+### 1.5.3 指标分层（可比层 / 专属层）
+
+不同方法族没有共同指标，因此对比表分两层：
+
+| 层 | 例子 | 要求 |
+|---|---|---|
+| `comparable` | `runtime_s`、`finished` | **跨全部候选必须同键同量纲**；这是唯一允许横向比较的层 |
+| `own` | `p_value`、`objective`、`rmse` | 只要求同一候选跨 slice 同键，**不要求跨候选一致** |
+
+baseline 只出现在可比层。
+
+### 1.5.4 perspective_trials.json（只能由 runner 写）
+
+每视角产出 `perspective_trials/<perspective>.py`，打印一个 JSON 对象作为 metrics；然后用工具真跑：
+
+```bash
+python "tools/perspective_trial_runner.py" open --workspace "." --slices slices.json
+python "tools/perspective_trial_runner.py" run --workspace "." --perspective statistician --option-id O1 --slice full
+python "tools/perspective_trial_runner.py" status --workspace "."
+python "tools/perspective_trial_runner.py" verify --workspace "."
+```
+
+- `slices` ≥2；无数据集的小问用 `--axis parameter|scenario`（参数/场景切片），`data_ref` 可为 null 但必须写 `slice_axis_note`；
+- 每个 run 必须 `executed_by: "tool"`、有 `exit_code`、`stdout_sha256`、`captured_at`、`script_sha256`；
+- 手填记录判 `trials_not_tool_executed`；脚本改了没重跑，`verify` 标 `stale`。
+
+### 1.5.5 渲染、回传与确认
+
+```bash
+python "tools/design_board.py" render --gate b --workspace "." --format all
+python "tools/design_board.py" serve  --gate b --workspace "."
+python "tools/design_board.py" ingest --gate b --workspace "." --from design_choices_gate_b.xlsx
+python "tools/design_board.py" status --gate b --workspace "."
+python "tools/design_board.py" confirm --gate b --workspace "." --apply
+python "tools/design_board_checker.py" --gate b --workspace "." --mode excellence
+```
+
+B 板渲染必须包含：候选分数与维度分、每模型 pros/cons、多组数据对比表（可比层 + 专属层）、推荐/不建议理由与 `when_better`、baseline 参照行、4 位确认码。页头醒目标注"这是 B 闸门"。
+
+确认码由 B 板 `board_sha256` 派生；改板必须重新 render + 重新 confirm。`--gate` 决定四件套文件名与回执目录（见 `references/tools.md`）。
+
+### 1.5.6 裁决 Agent（B 板确认之后才出场）
+
+1. 读 `model_advice.json` + B 板 `user_choice`（`user_locked: true`）。
+2. **无条件采用用户选择**：`model_selection_audit.json` 写 `selected_by: "user"`、`user_choice_id`、`advice_recommended_id`、`diverged_from_advice`；候选与拒绝理由引用建议文件，不重新打分。
+3. `model_decision.md` 记录：用户选了什么、建议 Agent 原本推荐什么、若不一致为何按用户选择执行。
+4. 产出 Phase 1 的全部规范产物（`model_spec.json`、`solver_strategy.json`、`optimization_certificate.json`、`uncertainty_budget.json`、`validation_profile.json`、`ablation_study.json`、`innovation_register.json`、`final_solution.json`、`model_decision.md`）。
+5. **不得**把用户选择"技术性修正"成自己偏好的方案。
+
+### 1.5.7 重开 B 闸门
+
+若推进中发现用户所选方案不可行（求解器无解、约束自相矛盾、数据不足以支撑）：
+
+```json
+{"schema_version": 1, "question_id": "Q1", "raised_by": "arbitrator",
+ "raised_at": "ISO8601", "gate": "b", "user_choice_id": "O1",
+ "blocking_reason": "solver_infeasible",
+ "evidence": ["optimization_certificate.json#status=infeasible"],
+ "proposed_alternatives": ["O3"], "requires_user_reconfirm": true}
+```
+
+产出 `reopen_gate_request.json` 并**停下**等用户重新走 B 闸门；不得自行换方案，也不得绕过确认写码。
+
+---
 
 ## Phase 2: 写作交接文档 Agent
 

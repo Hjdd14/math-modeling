@@ -1,5 +1,9 @@
 # 数学建模 Skill「建模决策闸门」综合改进方案
 
+> **⚠️ 本文 §0–§20 描述的是 v1「单闸门」实现（Phase 0.5 一次确认，候选模型同时锁定）。**
+> **v1.1.0 起已升级为「双闸门」（A 框架/范式闸门 + B 方案择定闸门），权威规格见文末 [§21 双闸门改造](#21-双闸门改造v1102026-10-30)。**
+> 两者冲突时以 §21 与 `SKILL.md` / `references/workflow.md` 为准；§0–§20 保留作历史实现记录与设计动因。
+
 > 状态：**规划稿（未实施）**。本文件只做设计与计划，不改动任何既有代码、模板、测试或产物契约。
 > 编写依据：对本仓库 `SKILL.md` / `references/` / `tools/` / `tests/` / `examples/` 的实际通读与探针实测，以及两个兄弟 skill（`math-modeling-per-question`、`math-modeling-orchestrator`）的对照。
 > 目标：把"AI 直接黑箱做完"改成"先给用户看建模思路与候选算法、用户改完确认、再落地代码"，并且**让这个闸门在代码层面可校验、难以被静默跳过**。
@@ -1892,3 +1896,77 @@ graph LR
 
 1. **懒加载 + 优雅降级**：`render_board()` 用 `importlib` 按需加载 `design_board_html` / `design_board_xlsx`。缺模块或缺 `openpyxl` 时只把该格式放进 `skipped` 并继续写其余格式——不因为一个可选视图没装就把整个 `render` 打断。
 2. **Excel 权重用公式保证合计恒为 1**：前 6 维写 `=1/7`、最后一维写 `=1-SUM(前6维)`。若 7 维都写 `round(1/7,4)=0.1429`，合计是 1.0003，表一打开「合计≠1」的红色条件格式就亮着——告警会失去信号价值（与 §20.2 缺陷 4 同类）。
+
+
+---
+
+## 21. 双闸门改造（v1.1.0，2026-10-30）
+
+### 21.1 为什么拆成两道
+
+实测证据（一次完整会话）：五份 `revised_*.json` 的 `model_name` **全部**内嵌 `O1 … user_locked`，共识度第 0 轮即 100。原因不是模型能力，而是 Phase 0.5 把"选模板"和"选模型"压在同一块板上，且调度者把锁定措辞写进了 `problem_brief.md`。
+
+锁点有四处，缺一不可：`SKILL.md` 的 honoring 措辞、`workflow.md §0.5` 的同义措辞、A 板 `options/user_locked` 结构、checker 的 `insufficient_options`/`invalid_user_choice` 校验。
+
+### 21.2 两闸门职责
+
+| | A 闸门（Phase 0.5） | B 闸门（Phase 1.5） |
+|---|---|---|
+| 回答 | 题目读对了吗？高危假设接不接受？探索哪些范式？ | 这一问用哪个模型？ |
+| 次数 | 整题 1 次 | 主仓库整题 1 次；分支每问 1 次 |
+| 板 | `design_board.json`（schema 2） | `design_board_gate_b.json` |
+| 证据 | 范式集合（`paradigm_set`） | `model_advice.json` + `perspective_trials.json` |
+| 阻断 | 进 Phase 1 与任何代码 | 进 Phase 2/3，尤其 `solution.*` |
+| 执行层 | hook：根目录交付代码 | hook：`questions/qN/` 交付代码 |
+
+### 21.3 A 板 schema v2（要点）
+
+- `questions[].paradigm_set`：3–5 项，每项 `paradigm_id/name/family/source_ref/why_explore/explore_cost`；
+- 同题至少 1 个 `family` 与其他不同（异质）；
+- `paradigm_selection`：≥2 项、覆盖 ≥2 族；
+- `options: []`、`user_choice: null`、`user_locked: false`（否则 `gate_a_user_locked_forbidden`）；
+- `mini_trial` 由必填降为可选；旧板（schema<2）语义与失败码保持不变。
+
+### 21.4 B 板与建议文件（要点）
+
+- `model_advice.json`：恰好 1 个 recommended、候选 5–8、全部有分、pros/cons ≥2、不推荐项 `why_not`≥2 + `when_better`、`is_judge_panel:false`；
+- 指标分两层：`comparable`（跨候选同键，唯一可横向比较）+ `own`（各模型自己的指标）；
+- `perspective_trials.json`：slices ≥2、perspectives ≥5、每个 run `executed_by:"tool"` + `exit_code` + `stdout_sha256`；**唯一写入口是 `tools/perspective_trial_runner.py`**；
+- `data_comparison` 每一格必须能按 `(option_id, slice_id)` 回溯到 trials，数值一致（容差 1e-9），否则 `advice_number_mismatch`。
+
+### 21.5 双时间线与"缺板即错"
+
+- A：`code_written_before_gate_a`（schema<2 旧板仍报 `code_written_before_confirm`）；
+- B：`code_written_before_gate_b`，分支按 `questions/qN` 逐问比；
+- **板缺失 + 已有交付代码 = error**，不得 `skipped`（v1 在这里会静默降级）；
+- `perspective_trials/**` 是试算代码，永不计入交付代码时间线。
+
+### 21.6 checker 分层
+
+- A 组：范式校验 + `gate_a_user_locked_forbidden`；跳过候选对账，只报 `paradigm_audit_pending`（warning）。
+- B 组：`advice_*`（10 个 code）、`trials_*`（7 个 code）、`user_choice_present`、`choice_in_options`、`preauthorized_not_attested`、B 板↔审计对账。
+- 新旧板由 `schema_version` 判定；旧板行为逐字保留。
+
+### 21.7 hook 守卫（L5，已升级）
+
+判定顺序：`perspective_trials/` 放行 → `questions/<qid>/` 交付代码要求该问 B 板已确认 → 根交付代码要求 A 板确认（A 板 schema≥2 时还要求 B 板确认）→ legacy 放行 + warning。fail-open 不变。
+
+### 21.8 命令
+
+```bash
+python tools/design_board.py render --gate b --workspace . --format all
+python tools/design_board.py confirm --gate b --workspace . --apply
+python tools/design_board_checker.py --gate a --workspace . --mode excellence
+python tools/design_board_checker.py --gate b --workspace . --mode excellence
+python tools/perspective_trial_runner.py status --workspace .
+python tools/model_advice_builder.py validate --workspace . --mode excellence
+```
+
+### 21.9 迁移
+
+`migrate_workspace.py`：旧板保持可用；存在 A 板但无 B 板 → `legacy_gate_a_only: true`（excellence 下 B 缺口 error、standard warning）；已写完代码 → `legacy_pre_two_gate: true`；`user_locked: true` 迁移时置 false 并写 `migrated_release_lock: true`。**不得伪造 B 板**。
+
+### 21.10 与 Phase 4 的边界
+
+B 闸门的打分是"建议"，`is_judge_panel: false` 是硬字段；多评委审查仍在 Phase 4，两者不得混淆。
+

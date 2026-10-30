@@ -64,6 +64,24 @@ FIXTURE_MARKERS = ("tests/test_data", "examples/solved-python", "examples/design
 TIMELINE_TOLERANCE_SECONDS = 5.0
 # 每个候选方案必须说明：为什么选它、风险、来源、试算证据。
 OPTION_REQUIRED_FIELDS = ("rationale", "risk", "source_ref", "mini_trial")
+# A 板 v2（framework gate）引入 paradigm_set 后，mini_trial 变为可选：
+# 范式阶段还没有"最终候选"，强求试算等于逼 AI 编数字。
+A_OPTION_REQUIRED_FIELDS = ("rationale", "risk", "source_ref")
+# B 板（model gate）的候选来自建议 Agent，字段重心从"理由/风险"转到"结论/分数"。
+B_OPTION_REQUIRED_FIELDS = ("name", "verdict", "score")
+PARADIGM_REQUIRED_FIELDS = ("paradigm_id", "name", "family", "source_ref", "why_explore", "explore_cost")
+PARADIGM_COST_LEVELS = ("low", "medium", "high")
+ADVICE_FILENAME = "model_advice.json"
+TRIALS_FILENAME = "perspective_trials.json"
+TRIALS_DIRNAME = "perspective_trials"
+BOARD_FILES = {"a": "design_board.json", "b": "design_board_gate_b.json"}
+ROUNDS_DIRS = {"a": "design_rounds", "b": "design_rounds_gate_b"}
+ADVICE_MIN_CANDIDATES = 5
+ADVICE_MAX_CANDIDATES = 8
+ADVICE_MIN_SLICES = 2
+ADVICE_MIN_PERSPECTIVES = 5
+ADVICE_NUMBER_TOLERANCE = 1e-9
+JUDGE_WORDING_PATTERNS = ("评委通过", "评委不通过", "评审通过", "评审结论")
 # 确认回执必须能回答：谁、什么时候、通过什么通道、用什么确认码。
 RECEIPT_REQUIRED_FIELDS = ("confirmed_at", "confirmed_by", "receipt_origin", "confirm_code")
 TIMELINE_CODE_FILES = ("solution.py", "solution.m", "solution_tests.py", "solution_tests.m")
@@ -300,11 +318,12 @@ def _collect_timeline_files(root: Path) -> list[tuple[str, float]]:
     return entries
 
 
-def _empty_result(root: Path, mode: str, cross_audit: bool) -> dict:
+def _empty_result(root: Path, mode: str, cross_audit: bool, gate: str = "a", board_path: Path | None = None) -> dict:
     return {
         "workspace": str(root),
         "mode": mode,
-        "path": str(root / "design_board.json"),
+        "gate": gate,
+        "path": str(board_path or (root / BOARD_FILES.get(gate, BOARD_FILES["a"]))),
         "passed": True,
         "warning": False,
         "confirmed": False,
@@ -315,17 +334,52 @@ def _empty_result(root: Path, mode: str, cross_audit: bool) -> dict:
     }
 
 
-def _missing_result(root: Path, mode: str, cross_audit: bool, allow_legacy: bool = False) -> dict:
-    """缺 design_board.json 的返回。
+def _missing_result(
+    root: Path,
+    mode: str,
+    cross_audit: bool,
+    allow_legacy: bool = False,
+    gate: str = "a",
+    board_path: Path | None = None,
+) -> dict:
+    """缺决策板的返回。
 
     `allow_legacy=True` 时把这条 error 降级为 warning，并把 issue code 换成
     `legacy_workspace_without_board`，让旧工作区可以带着一条可读的待办继续跑；
     其它校验项维持原样（没文件本来就都会跳过）。
+
+    **双闸门硬规则**：若板不在了、但交付代码已经存在，仍然是 error——
+    "先写代码、后补板"不能因为板被删掉就变成 skipped。
     """
     severity = "error" if _strict(mode) else "warning"
     if allow_legacy:
         severity = "warning"
-    result = _empty_result(root, mode, cross_audit)
+    board_name = (board_path.name if board_path else BOARD_FILES.get(gate, BOARD_FILES["a"]))
+    result = _empty_result(root, mode, cross_audit, gate, board_path)
+    delivery = _delivery_code_files(root)
+    if delivery:
+        # 契约 §2.8：**strict/excellence** 下"缺板 + 有交付代码"才是 error；
+        # standard 仍按 warning 留痕，否则所有"还没做板"的旧工作区会一片红。
+        # --allow-legacy 是旧工作区逃生口：即使有代码也只降为 warning。
+        write_severity = "warning" if (not _strict(mode) or allow_legacy) else "error"
+        allow_legacy = False
+        result["issues"] = [
+            {
+                "code": f"code_written_before_gate_{gate}",
+                "severity": write_severity,
+                "message": f"缺少 {board_name}，但已存在交付代码 {delivery}；"
+                "闸门板不在场不能把这条降级为跳过。",
+                "files": delivery,
+            }
+        ]
+        result["passed"] = write_severity != "error"
+        result["warning"] = write_severity == "warning"
+        result["checks"] = [
+            {"name": "design_board", "passed": False},
+            {"name": "timeline", "passed": write_severity != "error", "skipped": False, "violations": delivery},
+            {"name": "board_audit", "passed": True, "skipped": True, "reason": "missing_design_board"},
+        ]
+        return result
     result["passed"] = severity == "warning"
     result["warning"] = severity == "warning"
     result["checks"] = [
@@ -356,14 +410,21 @@ def _missing_result(root: Path, mode: str, cross_audit: bool, allow_legacy: bool
         {
             "code": "missing_design_board",
             "severity": severity,
-            "message": "缺少 design_board.json；excellence 模式必须先给用户看候选建模方案并取得确认回执。",
+            "message": f"缺少 {board_name}；excellence 模式必须先给用户看方案并取得确认回执。",
         }
     ]
     return result
 
 
-def _invalid_json_result(root: Path, mode: str, cross_audit: bool, message: str) -> dict:
-    result = _empty_result(root, mode, cross_audit)
+def _invalid_json_result(
+    root: Path,
+    mode: str,
+    cross_audit: bool,
+    message: str,
+    gate: str = "a",
+    board_path: Path | None = None,
+) -> dict:
+    result = _empty_result(root, mode, cross_audit, gate, board_path)
     result["passed"] = False
     result["warning"] = False
     result["checks"] = [
@@ -375,27 +436,698 @@ def _invalid_json_result(root: Path, mode: str, cross_audit: bool, message: str)
     return result
 
 
+def _board_schema(payload: dict) -> int:
+    """读取板结构版本；缺失或非法一律按 1（legacy）处理。"""
+    version = payload.get("schema_version")
+    if isinstance(version, int) and not isinstance(version, bool):
+        return version
+    return 1
+
+
+def _load_json_file(path: Path) -> tuple[dict | None, str | None]:
+    """读 JSON 对象；返回 (payload, error_message)。"""
+    if not path.is_file():
+        return None, f"缺少 {path.name}"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - 统一转成结构化 issue
+        return None, f"{path.name} 不是合法 JSON: {exc}"
+    if not isinstance(payload, dict):
+        return None, f"{path.name} 顶层必须是 JSON 对象"
+    return payload, None
+
+
+def _sha256_file(path: Path) -> str:
+    """文件字节级 sha256（十六进制小写）；文件不存在返回空串。"""
+    if not path.is_file():
+        return ""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_number(value) -> bool:
+    """排除 bool 的数值判定（True 会被 isinstance(True, int) 骗到）。"""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _delivery_code_files(root: Path) -> list[str]:
+    """只收集"交付代码"（solution.* / solution_tests.*），不含试算代码与结果。
+
+    两仓库形态都覆盖：根目录（主仓库整题）与 `questions/qN/`（分支分小问）。
+    `perspective_trials/**` 永不进入本清单——它是 B 闸门之前允许存在的试算代码。
+    """
+    entries: list[str] = []
+    for name in TIMELINE_CODE_FILES:
+        candidate = root / name
+        if candidate.is_file():
+            entries.append(name)
+    questions_dir = root / "questions"
+    if questions_dir.is_dir():
+        for question_dir in sorted(child for child in questions_dir.iterdir() if child.is_dir()):
+            for name in TIMELINE_CODE_FILES:
+                candidate = question_dir / name
+                if candidate.is_file():
+                    try:
+                        entries.append(candidate.relative_to(root).as_posix())
+                    except ValueError:
+                        entries.append(candidate.as_posix())
+    return entries
+
+
+def _check_paradigm_set(
+    question: dict,
+    question_id: str,
+    schema: int,
+    severity: str,
+    issues: list[dict],
+    checks: list[dict],
+) -> bool:
+    """校验 A 板的 paradigm_set / paradigm_selection。
+
+    返回 True 表示该问走"范式模式"（不再要求 >=2 个模型候选）。
+    """
+    paradigm_set = question.get("paradigm_set")
+    has_set = isinstance(paradigm_set, list) and bool(paradigm_set)
+    if not has_set:
+        if schema >= 2:
+            _add_issue(
+                issues,
+                "paradigm_set_missing",
+                f"{question_id} 是 schema v2 的 A 板，但缺少 paradigm_set；"
+                "框架闸门必须给出 3-5 个待探索范式，而不是直接给模型候选。",
+                severity=severity,
+                question_id=question_id,
+            )
+        else:
+            # 旧板（schema<2）就是当前存量常态：不额外报警，避免把"还没迁移"变成噪声。
+            # 迁移请走 tools/migrate_workspace.py，它会把板升到 schema v2 并写 paradigm 占位。
+            checks.append({"name": "paradigm_set", "question_id": question_id, "passed": True, "skipped": True,
+                           "reason": "legacy_board"})
+        return False
+
+    checks.append({"name": "paradigm_set", "question_id": question_id, "passed": True,
+                   "count": len(paradigm_set)})
+    if not (3 <= len(paradigm_set) <= 5):
+        _add_issue(
+            issues,
+            "paradigm_set_size",
+            f"{question_id} 的 paradigm_set 有 {len(paradigm_set)} 项，要求 3-5 项。",
+            severity=severity,
+            question_id=question_id,
+            count=len(paradigm_set),
+        )
+
+    paradigm_ids: list[str] = []
+    family_by_id: dict[str, str] = {}
+    for index, paradigm in enumerate(paradigm_set):
+        label = f"P{index + 1}"
+        if not isinstance(paradigm, dict):
+            _add_issue(issues, "paradigm_set_field_missing",
+                       f"{question_id} 的第 {index + 1} 个范式不是对象。",
+                       severity=severity, question_id=question_id, paradigm_id=label)
+            continue
+        paradigm_id = paradigm.get("paradigm_id")
+        if _present(paradigm_id):
+            paradigm_ids.append(str(paradigm_id))
+            label = str(paradigm_id)
+        for field in PARADIGM_REQUIRED_FIELDS:
+            if not _present(paradigm.get(field)):
+                _add_issue(
+                    issues,
+                    "paradigm_set_field_missing",
+                    f"{question_id} 的范式 {label} 缺少 {field}。",
+                    severity=severity,
+                    question_id=question_id,
+                    paradigm_id=label,
+                    field=field,
+                )
+        explore_cost = paradigm.get("explore_cost")
+        if isinstance(explore_cost, dict):
+            level = explore_cost.get("level")
+            if _present(level) and str(level).lower() not in PARADIGM_COST_LEVELS:
+                _add_issue(
+                    issues,
+                    "paradigm_cost_invalid",
+                    f"{question_id} 的范式 {label} 的 explore_cost.level={level!r} "
+                    f"不在 {list(PARADIGM_COST_LEVELS)} 内。",
+                    severity=severity,
+                    question_id=question_id,
+                    paradigm_id=label,
+                    level=level,
+                )
+        source_ref = paradigm.get("source_ref")
+        if isinstance(source_ref, dict) and source_ref.get("verified") is False:
+            if not _present(source_ref.get("unverified_reason")):
+                _add_issue(
+                    issues,
+                    "unverified_source_without_reason",
+                    f"{question_id} 的范式 {label} 标记来源未核实，但没有写 unverified_reason。",
+                    severity=severity,
+                    question_id=question_id,
+                    paradigm_id=label,
+                )
+        family = paradigm.get("family")
+        if _present(family):
+            family_by_id[label] = str(family)
+
+    distinct_families = {value for value in family_by_id.values()}
+    if family_by_id and len(distinct_families) < 2:
+        _add_issue(
+            issues,
+            "paradigm_no_heterogeneous",
+            f"{question_id} 的范式集合全部属于同一方法族 {sorted(distinct_families)}；"
+            "至少要有 1 个异质族，否则五视角仍然是同族互抄。",
+            severity=severity,
+            question_id=question_id,
+            families=sorted(distinct_families),
+        )
+
+    selection = question.get("paradigm_selection")
+    selection = selection if isinstance(selection, list) else []
+    if len(selection) < 2:
+        _add_issue(
+            issues,
+            "paradigm_selection_invalid",
+            f"{question_id} 的 paradigm_selection 少于 2 项；用户至少确认两个要探索的范式。",
+            severity=severity,
+            question_id=question_id,
+            selection=selection,
+        )
+    else:
+        unknown = [item for item in selection if str(item) not in [str(pid) for pid in paradigm_ids]]
+        if unknown:
+            _add_issue(
+                issues,
+                "paradigm_selection_invalid",
+                f"{question_id} 的 paradigm_selection 含 paradigm_set 里不存在的 id: {unknown}。",
+                severity=severity,
+                question_id=question_id,
+                unknown=unknown,
+            )
+        selected_families = {
+            family_by_id.get(str(item), "") for item in selection if str(item) in family_by_id
+        }
+        selected_families.discard("")
+        if len(selected_families) < 2:
+            _add_issue(
+                issues,
+                "paradigm_selection_not_heterogeneous",
+                f"{question_id} 的 paradigm_selection 只覆盖 {sorted(selected_families)} 一个方法族；"
+                "选中的范式里至少要有 1 个异质族。",
+                severity=severity,
+                question_id=question_id,
+                families=sorted(selected_families),
+            )
+    checks.append({"name": "paradigm_selection", "question_id": question_id, "passed": bool(selection)})
+    return True
+
+
+def _trials_index(trials: dict) -> dict[tuple[str, str], dict]:
+    """把 perspective_trials.json 摊平成 {(option_id, slice_id): run}，同键取 run_seq 最大的。"""
+    index: dict[tuple[str, str], dict] = {}
+    for perspective in trials.get("perspectives") or []:
+        if not isinstance(perspective, dict):
+            continue
+        option_id = str(perspective.get("option_id") or "")
+        for run in perspective.get("runs") or []:
+            if not isinstance(run, dict):
+                continue
+            key = (option_id, str(run.get("slice_id") or ""))
+            existing = index.get(key)
+            if existing is None or (run.get("run_seq") or 0) >= (existing.get("run_seq") or 0):
+                index[key] = run
+    return index
+
+
+def _check_trials(
+    root: Path,
+    severity: str,
+    issues: list[dict],
+    checks: list[dict],
+) -> tuple[dict | None, dict[tuple[str, str], dict]]:
+    """校验 perspective_trials.json：覆盖、工具执行、可比指标键一致。"""
+    trials_path = root / TRIALS_FILENAME
+    trials, load_error = _load_json_file(trials_path)
+    if trials is None:
+        _add_issue(
+            issues,
+            "trials_missing",
+            f"缺少 {TRIALS_FILENAME}（{load_error}）；B 闸门的数据对比必须来自工具执行的试算。",
+            severity=severity,
+        )
+        checks.append({"name": "trials", "passed": False})
+        return None, {}
+
+    slices = trials.get("slices")
+    slices = slices if isinstance(slices, list) else []
+    slice_ids = [str(item.get("slice_id")) for item in slices if isinstance(item, dict) and _present(item.get("slice_id"))]
+    checks.append({"name": "trials_slices", "passed": len(slice_ids) >= ADVICE_MIN_SLICES, "count": len(slice_ids)})
+    if len(slice_ids) < ADVICE_MIN_SLICES:
+        _add_issue(
+            issues,
+            "trials_slices_insufficient",
+            f"{TRIALS_FILENAME} 只有 {len(slice_ids)} 个 slice，至少需要 {ADVICE_MIN_SLICES} 组数据对比"
+            "（无数据集的小问改用 slice_axis=parameter/scenario）。",
+            severity=severity,
+            slice_ids=slice_ids,
+        )
+
+    perspectives = trials.get("perspectives")
+    perspectives = perspectives if isinstance(perspectives, list) else []
+    checks.append(
+        {"name": "trials_perspectives", "passed": len(perspectives) >= ADVICE_MIN_PERSPECTIVES,
+         "count": len(perspectives)}
+    )
+    if len(perspectives) < ADVICE_MIN_PERSPECTIVES:
+        _add_issue(
+            issues,
+            "trials_perspectives_insufficient",
+            f"{TRIALS_FILENAME} 只覆盖 {len(perspectives)} 个视角，要求 >= {ADVICE_MIN_PERSPECTIVES}。",
+            severity=severity,
+            count=len(perspectives),
+        )
+
+    comparable_keys_by_slice: dict[str, set[str]] = {}
+    for perspective in perspectives:
+        if not isinstance(perspective, dict):
+            continue
+        name = str(perspective.get("perspective") or "<unknown>")
+        option_id = str(perspective.get("option_id") or "")
+        runs = [run for run in (perspective.get("runs") or []) if isinstance(run, dict)]
+        run_slices = {str(run.get("slice_id")) for run in runs}
+        missing = [slice_id for slice_id in slice_ids if slice_id not in run_slices]
+        if missing:
+            _add_issue(
+                issues,
+                "trials_slice_coverage",
+                f"视角 {name}（{option_id or '无 option_id'}）缺少 slice: {missing}。",
+                severity=severity,
+                perspective=name,
+                option_id=option_id,
+                missing=missing,
+            )
+        if not option_id:
+            _add_issue(
+                issues,
+                "trials_option_id_missing",
+                f"视角 {name} 没有 option_id，无法与建议候选对账。",
+                severity=severity,
+                perspective=name,
+            )
+        for run in runs:
+            if run.get("executed_by") != "tool":
+                _add_issue(
+                    issues,
+                    "trials_not_tool_executed",
+                    f"视角 {name} 的 slice={run.get('slice_id')!r} 记录 executed_by={run.get('executed_by')!r}；"
+                    "试算只能由 tools/perspective_trial_runner.py 执行并留痕，手填数字不算证据。",
+                    severity=severity,
+                    perspective=name,
+                    slice_id=run.get("slice_id"),
+                )
+            if not isinstance(run.get("exit_code"), int) or isinstance(run.get("exit_code"), bool):
+                _add_issue(
+                    issues,
+                    "trials_not_tool_executed",
+                    f"视角 {name} 的 slice={run.get('slice_id')!r} 缺少整数 exit_code。",
+                    severity=severity,
+                    perspective=name,
+                    slice_id=run.get("slice_id"),
+                )
+            for field in ("stdout_sha256", "captured_at"):
+                if not _present(run.get(field)):
+                    _add_issue(
+                        issues,
+                        "trials_field_missing",
+                        f"视角 {name} 的 slice={run.get('slice_id')!r} 缺少 {field}；run 不是 runner 写的。",
+                        severity=severity,
+                        perspective=name,
+                        slice_id=run.get("slice_id"),
+                        field=field,
+                    )
+            metrics = run.get("metrics")
+            comparable = metrics.get("comparable") if isinstance(metrics, dict) else None
+            if isinstance(comparable, dict):
+                comparable_keys_by_slice.setdefault(str(run.get("slice_id")), set()).update(comparable.keys())
+
+    # 同一 slice 下"全部视角都必须有的可比键"：取交集应等于并集（否则有视角少给键）。
+    run_keys_by_slice: dict[str, list[set[str]]] = {}
+    for perspective in perspectives:
+        if not isinstance(perspective, dict):
+            continue
+        for run in perspective.get("runs") or []:
+            if not isinstance(run, dict):
+                continue
+            metrics = run.get("metrics")
+            comparable = metrics.get("comparable") if isinstance(metrics, dict) else None
+            if isinstance(comparable, dict):
+                run_keys_by_slice.setdefault(str(run.get("slice_id")), []).append(set(comparable.keys()))
+    for slice_id, key_sets in run_keys_by_slice.items():
+        if not key_sets:
+            continue
+        union = set().union(*key_sets)
+        if any(keys != union for keys in key_sets):
+            _add_issue(
+                issues,
+                "trials_metric_keys_mismatch",
+                f"slice={slice_id} 下各视角的 comparable 指标键不一致："
+                f"应为 {sorted(union)}，存在缺键的 run。",
+                severity=severity,
+                slice_id=slice_id,
+                expected=sorted(union),
+            )
+
+    comparable_definitions = (trials.get("metric_definitions") or {}).get("comparable")         if isinstance(trials.get("metric_definitions"), dict) else None
+    checks.append(
+        {"name": "trials_metric_definitions", "passed": bool(comparable_definitions)}
+    )
+    if not comparable_definitions:
+        _add_issue(
+            issues,
+            "trials_metric_definitions_missing",
+            f"{TRIALS_FILENAME} 缺少 metric_definitions.comparable，无法判定横向可比口径。",
+            severity=severity,
+        )
+
+    return trials, _trials_index(trials)
+
+
+def _check_advice(
+    question_id: str,
+    advice: dict,
+    board_options: list[dict],
+    trials_index: dict[tuple[str, str], dict],
+    severity: str,
+    issues: list[dict],
+    checks: list[dict],
+) -> None:
+    """校验 model_advice.json 的 8 条硬规则 + 与 trials 的数值一致性。"""
+    if advice.get("is_judge_panel") is not False:
+        _add_issue(
+            issues,
+            "advice_is_not_judge_panel",
+            f"{question_id} 的 model_advice.json 必须显式写 is_judge_panel=false；"
+            "选型建议不是评委审查（评委审查在 Phase 4）。",
+            severity=severity,
+            question_id=question_id,
+            value=advice.get("is_judge_panel"),
+        )
+    if not _present(advice.get("disclaimer")):
+        _add_issue(issues, "advice_is_not_judge_panel",
+                   f"{question_id} 的 model_advice.json 缺少 disclaimer 声明。",
+                   severity=severity, question_id=question_id)
+
+    dumped = json.dumps(advice, ensure_ascii=False)
+    hits = [pattern for pattern in JUDGE_WORDING_PATTERNS if pattern in dumped]
+    if hits:
+        _add_issue(
+            issues,
+            "advice_no_judge_wording",
+            f"{question_id} 的建议里出现评委结论措辞 {hits}；建议 Agent 不得冒充评委。",
+            severity=severity,
+            question_id=question_id,
+            hits=hits,
+        )
+
+    candidates = advice.get("candidates")
+    candidates = candidates if isinstance(candidates, list) else []
+    checks.append({"name": "advice_candidates", "question_id": question_id, "passed": True,
+                   "count": len(candidates)})
+    if not (ADVICE_MIN_CANDIDATES <= len(candidates) <= ADVICE_MAX_CANDIDATES):
+        _add_issue(
+            issues,
+            "advice_candidates_count",
+            f"{question_id} 有 {len(candidates)} 个候选，要求 {ADVICE_MIN_CANDIDATES}-{ADVICE_MAX_CANDIDATES} 个"
+            "（五视角至少 5 个；追加动态专家最多 8 个；baseline 不占名额）。",
+            severity=severity,
+            question_id=question_id,
+            count=len(candidates),
+        )
+
+    recommended = [item for item in candidates
+                   if isinstance(item, dict) and item.get("verdict") == "recommended"]
+    if len(recommended) != 1:
+        _add_issue(
+            issues,
+            "advice_one_recommended",
+            f"{question_id} 有 {len(recommended)} 个 verdict=recommended，必须恰好 1 个。",
+            severity=severity,
+            question_id=question_id,
+            count=len(recommended),
+        )
+    recommended_id = advice.get("recommended_option_id")
+    if len(recommended) == 1 and _present(recommended_id):
+        if str(recommended[0].get("option_id")) != str(recommended_id):
+            _add_issue(
+                issues,
+                "advice_one_recommended",
+                f"{question_id} 的 recommended_option_id={recommended_id!r} 与 verdict=recommended 的候选不一致。",
+                severity=severity,
+                question_id=question_id,
+            )
+
+    rubric = advice.get("scoring_rubric")
+    dimension_ids: list[str] = []
+    if isinstance(rubric, dict):
+        for dimension in rubric.get("dimensions") or []:
+            if isinstance(dimension, dict) and _present(dimension.get("id")):
+                dimension_ids.append(str(dimension["id"]))
+    if not dimension_ids:
+        _add_issue(issues, "advice_scores_complete",
+                   f"{question_id} 缺少 scoring_rubric.dimensions，分数没有统一量纲。",
+                   severity=severity, question_id=question_id)
+
+    option_ids = [str(item.get("id")) for item in board_options if isinstance(item, dict) and _present(item.get("id"))]
+    candidate_ids = [str(item.get("option_id")) for item in candidates
+                     if isinstance(item, dict) and _present(item.get("option_id"))]
+    if option_ids and candidate_ids and sorted(option_ids) != sorted(candidate_ids):
+        _add_issue(
+            issues,
+            "advice_option_mismatch",
+            f"{question_id} 的板候选 {sorted(option_ids)} 与建议候选 {sorted(candidate_ids)} 不是一一对应。",
+            severity=severity,
+            question_id=question_id,
+            board_options=sorted(option_ids),
+            advice_candidates=sorted(candidate_ids),
+        )
+
+    candidate_by_id = {str(item.get("option_id")): item for item in candidates if isinstance(item, dict)}
+    for item in candidates:
+        if not isinstance(item, dict):
+            _add_issue(issues, "advice_candidates_count",
+                       f"{question_id} 的候选列表里混入了非对象元素。", severity=severity,
+                       question_id=question_id)
+            continue
+        option_id = str(item.get("option_id") or "<missing>")
+        score = item.get("score")
+        if not _is_number(score) or not (0 <= float(score) <= 100):
+            _add_issue(
+                issues,
+                "advice_scores_complete",
+                f"{question_id} 的候选 {option_id} 的 score={score!r} 不是 0-100 的数值。",
+                severity=severity,
+                question_id=question_id,
+                option_id=option_id,
+            )
+        dimension_scores = item.get("dimension_scores")
+        if isinstance(dimension_scores, dict) and dimension_ids:
+            missing_dims = [dim for dim in dimension_ids if not _is_number(dimension_scores.get(dim))]
+            if missing_dims:
+                _add_issue(
+                    issues,
+                    "advice_scores_complete",
+                    f"{question_id} 的候选 {option_id} 缺少维度分 {missing_dims}。",
+                    severity=severity,
+                    question_id=question_id,
+                    option_id=option_id,
+                    missing=missing_dims,
+                )
+        pros = item.get("pros") if isinstance(item.get("pros"), list) else []
+        cons = item.get("cons") if isinstance(item.get("cons"), list) else []
+        if len(pros) < 2 or len(cons) < 2:
+            _add_issue(
+                issues,
+                "advice_pros_cons",
+                f"{question_id} 的候选 {option_id} 的 pros/cons 各需 >=2 条（当前 {len(pros)}/{len(cons)}）。",
+                severity=severity,
+                question_id=question_id,
+                option_id=option_id,
+                pros=len(pros),
+                cons=len(cons),
+            )
+        if item.get("verdict") != "recommended":
+            why_not = item.get("why_not") if isinstance(item.get("why_not"), list) else []
+            if len(why_not) < 2 or not _present(item.get("when_better")):
+                _add_issue(
+                    issues,
+                    "advice_why_not_when_better",
+                    f"{question_id} 的不推荐候选 {option_id} 必须写 why_not >=2 条 + when_better。",
+                    severity=severity,
+                    question_id=question_id,
+                    option_id=option_id,
+                    why_not=len(why_not),
+                )
+
+    data_comparison = advice.get("data_comparison")
+    rows = data_comparison.get("rows") if isinstance(data_comparison, dict) else None
+    rows = rows if isinstance(rows, list) else []
+    slice_ids: list[str] = []
+    for row in rows:
+        if isinstance(row, dict) and _present(row.get("slice_id")):
+            slice_id = str(row["slice_id"])
+            if slice_id not in slice_ids:
+                slice_ids.append(slice_id)
+    checks.append({"name": "advice_data_comparison", "question_id": question_id,
+                   "passed": len(slice_ids) >= ADVICE_MIN_SLICES,
+                   "slice_count": len(slice_ids)})
+    if len(slice_ids) < ADVICE_MIN_SLICES:
+        _add_issue(
+            issues,
+            "advice_data_comparison",
+            f"{question_id} 的 data_comparison 只有 {len(slice_ids)} 个 slice，要求 >= {ADVICE_MIN_SLICES}。",
+            severity=severity,
+            question_id=question_id,
+            slice_count=len(slice_ids),
+        )
+
+    for slice_id in slice_ids:
+        covered = {str(row.get("option_id")) for row in rows
+                   if isinstance(row, dict) and str(row.get("slice_id")) == slice_id}
+        missing = [cid for cid in candidate_ids if cid not in covered]
+        if missing:
+            _add_issue(
+                issues,
+                "advice_data_comparison",
+                f"{question_id} 的 slice={slice_id} 没有覆盖候选 {missing}；对比表必须覆盖全部候选。",
+                severity=severity,
+                question_id=question_id,
+                slice_id=slice_id,
+                missing=missing,
+            )
+        key_sets = []
+        for row in rows:
+            if not isinstance(row, dict) or str(row.get("slice_id")) != slice_id:
+                continue
+            comparable = row.get("comparable")
+            if isinstance(comparable, dict):
+                key_sets.append(set(comparable.keys()))
+        if key_sets:
+            union = set().union(*key_sets)
+            if any(keys != union for keys in key_sets):
+                _add_issue(
+                    issues,
+                    "advice_comparable_metrics",
+                    f"{question_id} 的 slice={slice_id} 上各候选 comparable 键不一致：应为 {sorted(union)}。",
+                    severity=severity,
+                    question_id=question_id,
+                    slice_id=slice_id,
+                    expected=sorted(union),
+                )
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        option_id = str(row.get("option_id") or "")
+        slice_id = str(row.get("slice_id") or "")
+        key = (option_id, slice_id)
+        if option_id == "baseline":
+            continue
+        if not _present(row.get("trials_ref")):
+            _add_issue(
+                issues,
+                "advice_trials_ref_valid",
+                f"{question_id} 的对比行 ({option_id}, {slice_id}) 没有 trials_ref，数值无法回溯。",
+                severity=severity,
+                question_id=question_id,
+                option_id=option_id,
+                slice_id=slice_id,
+            )
+        run = trials_index.get(key)
+        if run is None:
+            if trials_index:
+                _add_issue(
+                    issues,
+                    "advice_trials_ref_valid",
+                    f"{question_id} 的对比行 ({option_id}, {slice_id}) 在 perspective_trials.json 里找不到对应 run。",
+                    severity=severity,
+                    question_id=question_id,
+                    option_id=option_id,
+                    slice_id=slice_id,
+                )
+            continue
+        run_metrics = run.get("metrics") if isinstance(run.get("metrics"), dict) else {}
+        for layer in ("comparable", "own"):
+            claimed = row.get(layer)
+            if not isinstance(claimed, dict):
+                continue
+            actual = run_metrics.get(layer) if isinstance(run_metrics.get(layer), dict) else {}
+            for metric_key, claimed_value in claimed.items():
+                actual_value = actual.get(metric_key)
+                if _is_number(claimed_value) and _is_number(actual_value):
+                    if abs(float(claimed_value) - float(actual_value)) > ADVICE_NUMBER_TOLERANCE:
+                        _add_issue(
+                            issues,
+                            "advice_number_mismatch",
+                            f"{question_id} 的 ({option_id}, {slice_id}) 指标 {metric_key}="
+                            f"{claimed_value!r} 与试算记录的 {actual_value!r} 不一致；数字不得手改。",
+                            severity=severity,
+                            question_id=question_id,
+                            option_id=option_id,
+                            slice_id=slice_id,
+                            metric=metric_key,
+                            claimed=claimed_value,
+                            actual=actual_value,
+                        )
+                elif claimed_value != actual_value:
+                    _add_issue(
+                        issues,
+                        "advice_number_mismatch",
+                        f"{question_id} 的 ({option_id}, {slice_id}) 指标 {metric_key} 与试算记录不一致。",
+                        severity=severity,
+                        question_id=question_id,
+                        option_id=option_id,
+                        slice_id=slice_id,
+                        metric=metric_key,
+                    )
+        candidate = candidate_by_id.get(option_id)
+        if candidate is not None and _is_number(candidate.get("score")):
+            continue
+
+
 def check_design_board(
     workspace: str,
     mode: str = "standard",
     cross_audit: bool = True,
     skip_timeline: bool = False,
     allow_legacy: bool = False,
+    gate: str = "a",
+    board_path: str | None = None,
 ) -> dict:
     root = Path(workspace)
     normalized_mode = mode.lower()
-    path = root / "design_board.json"
+    gate = (gate or "a").lower()
+    if gate not in BOARD_FILES:
+        gate = "a"
+    resolved_board = Path(board_path) if board_path else (root / BOARD_FILES[gate])
+    path = resolved_board
     fixture = _is_fixture_directory(root)
 
     if not path.exists():
-        return _missing_result(root, normalized_mode, cross_audit, allow_legacy)
+        return _missing_result(root, normalized_mode, cross_audit, allow_legacy, gate, resolved_board)
 
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
-        return _invalid_json_result(root, normalized_mode, cross_audit, f"design_board.json 不是合法 JSON: {exc}")
+        return _invalid_json_result(
+            root, normalized_mode, cross_audit, f"{path.name} 不是合法 JSON: {exc}", gate, resolved_board
+        )
     if not isinstance(payload, dict):
-        return _invalid_json_result(root, normalized_mode, cross_audit, "design_board.json 顶层必须是 JSON 对象。")
+        return _invalid_json_result(
+            root, normalized_mode, cross_audit, f"{path.name} 顶层必须是 JSON 对象。", gate, resolved_board
+        )
 
     strict = _strict(normalized_mode)
     severity = "error" if strict else "warning"
@@ -426,6 +1158,45 @@ def check_design_board(
             severity=severity,
         )
 
+    schema = _board_schema(payload)
+    lane = "b" if gate == "b" else "a"
+    trials_payload: dict | None = None
+    trials_index: dict[tuple[str, str], dict] = {}
+    advice_file: dict | None = None
+    if lane == "b":
+        trials_payload, trials_index = _check_trials(root, severity, issues, checks)
+        advice_file, advice_error = _load_json_file(root / ADVICE_FILENAME)
+        if advice_file is None:
+            _add_issue(
+                issues,
+                "advice_missing",
+                f"缺少 {ADVICE_FILENAME}（{advice_error}）；B 闸门的候选与打分必须来自建议 Agent 的结构化文件。",
+                severity=severity,
+            )
+            checks.append({"name": "advice", "passed": False})
+        else:
+            checks.append({"name": "advice", "passed": True})
+            claimed_sha = str(payload.get("advice_sha256") or "").strip().lower()
+            if claimed_sha:
+                actual_sha = _sha256_file(root / ADVICE_FILENAME)
+                if claimed_sha != actual_sha:
+                    _add_issue(
+                        issues,
+                        "advice_board_mismatch",
+                        "B 板的 advice_sha256 与 model_advice.json 实际内容不一致：板里展示的建议不是当前建议文件。",
+                        severity="error",
+                        claimed=claimed_sha,
+                        actual=actual_sha,
+                    )
+            reference = str(payload.get("advice_ref") or ADVICE_FILENAME)
+            if Path(reference).name != ADVICE_FILENAME:
+                _add_issue(
+                    issues,
+                    "advice_board_mismatch",
+                    f"advice_ref={reference!r} 不是 {ADVICE_FILENAME}；B 板的建议来源必须唯一。",
+                    severity=severity,
+                )
+
     option_names: list[str] = []
     chosen_names: list[tuple[str, str]] = []
     for index, question in enumerate(questions):
@@ -439,17 +1210,62 @@ def check_design_board(
             )
             continue
         question_id = str(question.get("id") or f"Q{index + 1}")
+        paradigm_mode = False
+        if lane == "a":
+            paradigm_mode = _check_paradigm_set(question, question_id, schema, severity, issues, checks)
+            # 只有 schema v2 的新 A 板才禁止 user_locked：旧板（schema<2）本来就是"候选板"，
+            # user_locked 在那里是有意义的历史字段，不能因为升级检查器就判旧工作区红。
+            if schema >= 2 and question.get("user_locked") is True:
+                _add_issue(
+                    issues,
+                    "gate_a_user_locked_forbidden",
+                    f"{question_id} 的 A 板仍写着 user_locked=true；框架闸门只确认范式边界，不锁定模型选型。",
+                    severity=severity,
+                    question_id=question_id,
+                )
+            if paradigm_mode and _present(question.get("user_choice")):
+                _add_issue(
+                    issues,
+                    "gate_a_user_choice_should_be_empty",
+                    f"{question_id} 的 A 板仍有 user_choice={question.get('user_choice')!r}；"
+                    "模型选择只能由 B 闸门的 user_choice 决定。",
+                    severity=severity,
+                    question_id=question_id,
+                )
+
         options = question.get("options")
         options = options if isinstance(options, list) else []
-        options_ok = len(options) >= 2
+        if lane == "b":
+            minimum: int = ADVICE_MIN_CANDIDATES
+            maximum: int | None = ADVICE_MAX_CANDIDATES
+            required_fields = B_OPTION_REQUIRED_FIELDS
+        elif paradigm_mode:
+            minimum = 0
+            maximum = None
+            required_fields = A_OPTION_REQUIRED_FIELDS
+        else:
+            minimum = 2
+            maximum = None
+            required_fields = OPTION_REQUIRED_FIELDS
+
+        options_ok = len(options) >= minimum and (maximum is None or len(options) <= maximum)
         checks.append(
             {"name": "options", "question_id": question_id, "passed": options_ok, "count": len(options)}
         )
         if not options_ok:
+            if lane == "b":
+                message = (
+                    f"{question_id} 有 {len(options)} 个候选，B 闸门要求 {minimum}-{maximum} 个"
+                    "（五视角至少 5 个，追加动态专家最多 8 个）。"
+                )
+            else:
+                message = (
+                    f"{question_id} 只有 {len(options)} 个候选方案，至少需要 2 个（推荐 + 备选）才能让用户比较。"
+                )
             _add_issue(
                 issues,
                 "insufficient_options",
-                f"{question_id} 只有 {len(options)} 个候选方案，至少需要 2 个（推荐 + 备选）才能让用户比较。",
+                message,
                 severity=severity,
                 question_id=question_id,
                 option_count=len(options),
@@ -476,13 +1292,12 @@ def check_design_board(
             name = option.get("name")
             if _present(name):
                 option_names.append(str(name))
-            for field in OPTION_REQUIRED_FIELDS:
+            for field in required_fields:
                 if not _present(option.get(field)):
                     _add_issue(
                         issues,
                         "missing_option_field",
-                        f"{question_id} 的候选 {option_label} 缺少 {field}；"
-                        "每个候选都要说明理由、风险、来源与试算证据。",
+                        f"{question_id} 的候选 {option_label} 缺少 {field}。",
                         severity=severity,
                         question_id=question_id,
                         option_id=option_label,
@@ -519,6 +1334,55 @@ def check_design_board(
                     if isinstance(option, dict) and option.get("id") == user_choice and _present(option.get("name")):
                         chosen_names.append((question_id, str(option["name"])))
                         break
+
+        if lane == "b":
+            if not _present(user_choice):
+                _add_issue(
+                    issues,
+                    "user_choice_present",
+                    f"{question_id} 的 B 板还没有 user_choice；模型必须由用户在板上亲自选定。",
+                    severity=severity,
+                    question_id=question_id,
+                )
+            if question.get("preauthorized") is True and strict:
+                _add_issue(
+                    issues,
+                    "preauthorized_not_attested",
+                    f"{question_id} 使用了 preauthorized=true（按建议自动执行）；excellence 语义要求每问由人选定模型，"
+                    "预授权只能留痕，不能当人工确认。",
+                    severity="error",
+                    question_id=question_id,
+                )
+            # 优先用文件内容做校验：文件是"建议 Agent 的产物"，板里的 advice 只是渲染副本。
+            # 两者不一致由 advice_board_mismatch 单独报，不因为副本旧就跳过实质检查。
+            resolved_advice: dict | None = None
+            embedded = question.get("advice")
+            if advice_file is not None:
+                normalized_qid = str(question_id).strip().lower()
+                nested = advice_file.get("questions")
+                if isinstance(nested, dict):
+                    for key, value in nested.items():
+                        if str(key).strip().lower() == normalized_qid and isinstance(value, dict):
+                            resolved_advice = value
+                            break
+                elif str(advice_file.get("question_id") or "").strip().lower() == normalized_qid:
+                    resolved_advice = advice_file
+                elif len(questions) == 1 and _present(advice_file.get("candidates")):
+                    resolved_advice = advice_file
+            if resolved_advice is None and isinstance(embedded, dict):
+                resolved_advice = embedded
+            if resolved_advice is None:
+                if advice_file is not None:
+                    _add_issue(
+                        issues,
+                        "advice_missing",
+                        f"{question_id} 在 {ADVICE_FILENAME} 里找不到对应建议（question_id 对不上），"
+                        "板里也没有嵌入 advice。",
+                        severity=severity,
+                        question_id=question_id,
+                    )
+            else:
+                _check_advice(question_id, resolved_advice, options, trials_index, severity, issues, checks)
 
     checks.append({"name": "confirmed", "passed": confirmed})
     if not confirmed:
@@ -564,13 +1428,14 @@ def check_design_board(
             missing=missing_receipt,
         )
 
-    rounds = _read_rounds(root / "design_rounds")
+    rounds_dir = root / ROUNDS_DIRS.get(gate, ROUNDS_DIRS["a"])
+    rounds = _read_rounds(rounds_dir)
     checks.append(
         {
             "name": "design_rounds",
             "passed": bool(rounds),
             "count": len(rounds),
-            "path": str(root / "design_rounds"),
+            "path": str(rounds_dir),
         }
     )
     if confirmed and not rounds:
@@ -716,13 +1581,21 @@ def check_design_board(
                 "violations": violations,
             }
         )
+        if lane == "b":
+            timeline_code = "code_written_before_gate_b"
+        elif schema >= 2:
+            timeline_code = "code_written_before_gate_a"
+        else:
+            # 旧板（schema<2）保留原 failure code，历史报告与测试的锚点不变。
+            timeline_code = "code_written_before_confirm"
         for violation in violations:
             _add_issue(
                 issues,
-                "code_written_before_confirm",
-                f"{violation['file']} 的 mtime 早于 confirmed_at 约 {violation['seconds_before']} 秒，"
-                "疑似先写代码、后补确认板。",
+                timeline_code,
+                f"{violation['file']} 的 mtime 早于 {gate} 闸门 confirmed_at 约 "
+                f"{violation['seconds_before']} 秒，疑似先写代码、后补确认板。",
                 severity=severity,
+                gate=gate,
                 file=violation["file"],
                 mtime=violation["mtime"],
                 confirmed_at=_format_timestamp(confirmed_ts),
@@ -733,6 +1606,21 @@ def check_design_board(
     if not cross_audit:
         cross_audit_state = "skipped"
         checks.append({"name": "board_audit", "passed": True, "skipped": True, "reason": "cross_audit_disabled"})
+    elif lane == "a" and schema >= 2:
+        # A 板 v2 只确认"题意框架 + 待探索范式"，此时 model_selection_audit.json 还没产出，
+        # 拿它来对账必然是假阴性。真正的候选↔选择对账在 B 闸门。
+        # 旧板（schema<2）仍然是"候选板"，保留原交叉校验行为，不做降级。
+        cross_audit_state = "framework_only"
+        checks.append(
+            {"name": "board_audit", "passed": True, "skipped": True, "reason": "gate_a_framework_only"}
+        )
+        _add_issue(
+            issues,
+            "paradigm_audit_pending",
+            "A 闸门只对账范式边界；模型候选与最终选择的对账由 B 闸门（design_board_gate_b.json）负责。",
+            severity="warning",
+            governance="gate_a",
+        )
     elif not confirmed:
         cross_audit_state = "not_applicable"
         checks.append({"name": "board_audit", "passed": True, "skipped": True, "reason": "board_not_confirmed"})
@@ -853,6 +1741,7 @@ def check_design_board(
     return {
         "workspace": str(root),
         "mode": normalized_mode,
+        "gate": gate,
         "path": str(path),
         "passed": passed,
         "warning": warning,
@@ -889,6 +1778,17 @@ def main():
         help="旧工作区逃生口：缺 design_board.json 只给 warning"
         "（code=legacy_workspace_without_board），其它失败码严格度不变",
     )
+    parser.add_argument(
+        "--gate",
+        default="a",
+        choices=["a", "b"],
+        help="a=框架与探索边界闸门（design_board.json）；b=方案择定闸门（design_board_gate_b.json）",
+    )
+    parser.add_argument(
+        "--board",
+        default=None,
+        help="显式指定板文件路径（默认按 --gate 解析到 --workspace 下的固定文件名）",
+    )
     args = parser.parse_args()
     try:
         result = check_design_board(
@@ -897,6 +1797,8 @@ def main():
             cross_audit=not args.no_cross_audit,
             skip_timeline=args.skip_timeline,
             allow_legacy=args.allow_legacy,
+            gate=args.gate,
+            board_path=args.board,
         )
         output(result)
         sys.exit(0 if result["passed"] else 1)

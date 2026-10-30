@@ -23,11 +23,21 @@
    ``unverified_reason = "迁移生成，未核验来源"``，checker 会据此给出可读待办，
    而不是让人以为来源已经核验过。
 5. 默认 dry-run，只打印将要写入的 JSON；``--apply`` 才落盘。
+6. **双闸门版本**：新生成的骨架是 A 板 ``schema_version: 2``（框架与探索边界闸门），
+   带 ``paradigm_set`` / ``paradigm_selection`` 占位；A 板不再锁定模型选型
+   （``user_locked`` 恒为 ``false`），模型选型留给 B 闸门 ``design_board_gate_b.json``。
+7. **旧板标注（``--annotate-legacy``）**：工作区已有旧 A 板时，本工具不重写骨架，只做
+   两件事：把 ``user_locked: true`` 改为 ``false`` 并写 ``migrated_release_lock: true`
+   留痕；在没有任何 ``design_board_gate_b.json`` 时写 ``legacy_gate_a_only: true`
+   （已写过代码再加 ``legacy_pre_two_gate: true``）。**绝不伪造 B 板**：
+   B 闸门必须由用户本人走 render → serve → ingest → confirm。
 
 用法
 ----
     python tools/migrate_workspace.py --workspace .            # 预览
     python tools/migrate_workspace.py --workspace . --apply    # 写入骨架
+    python tools/migrate_workspace.py --workspace . --annotate-legacy            # 预览标注
+    python tools/migrate_workspace.py --workspace . --annotate-legacy --apply    # 写入标注
 
 推断规则
 --------
@@ -55,6 +65,19 @@ from pathlib import Path
 BOARD_FILE = "design_board.json"
 BRIEF_FILE = "problem_brief.md"
 AUDIT_FILE = "model_selection_audit.json"
+GATE_B_FILE = "design_board_gate_b.json"
+
+# 新骨架一律按 A 板 schema v2（框架与探索边界闸门）生成。
+SCHEMA_VERSION = 2
+GATE_NAME = "a"
+
+# 旧板标注写入的留痕字段（迁移只写元数据，绝不写确认字段）。
+LEGACY_MARKER = "legacy_gate_a_only"
+PRE_TWO_GATE_MARKER = "legacy_pre_two_gate"
+RELEASE_LOCK_MARKER = "migrated_release_lock"
+
+# 交付代码白名单：用来判断"旧工作区是不是已经写完代码"（legacy_pre_two_gate）。
+DELIVERY_CODE_NAMES = ("solution.py", "solution.m", "solution_tests.py", "solution_tests.m")
 TITLE_LIMIT = 120
 PLACEHOLDER_TITLE = "（迁移占位，请补充）"
 PLACEHOLDER_OPTION_NAMES = ("待补充候选 A", "待补充候选 B")
@@ -79,6 +102,21 @@ NEXT_STEP_CONFIRM = (
     "python tools/design_board.py ingest --workspace . --from submission.json；"
     "连续两轮无修改后运行 python tools/design_board.py confirm --workspace . --apply 输入确认码"
 )
+NEXT_STEP_GATE_B = (
+    "补做 B 闸门（方案择定，确认前不得写交付代码）：A 板确认后，Phase 1-Q 结束时运行 "
+    "python tools/design_board.py render --gate b --workspace . → serve --gate b → "
+    "ingest --gate b → confirm --gate b --apply（用户本人输入 B 板确认码）"
+)
+
+# 范式集合占位：3 项、跨 2 个方法族，满足 A 板 schema v2 的「3–5 项 + 至少 1 个异质族」。
+PARADIGM_PLACEHOLDERS = (
+    ("P1", "待补充范式 A（例如统计推断族）", "statistical_inference"),
+    ("P2", "待补充范式 B（例如最优化族）", "optimization"),
+    ("P3", "待补充范式 C（例如仿真 / 情景族）", "simulation"),
+)
+PARADIGM_WHY_EXPLORE_PLACEHOLDER = "（迁移占位）请补充：该范式为什么值得纳入 Phase 1 的探索边界。"
+PARADIGM_COST_NOTE_PLACEHOLDER = "（迁移占位）请补充该范式的试算与数据成本。"
+PARADIGM_SELECTION = ("P1", "P2")
 
 
 def output(result: dict):
@@ -311,6 +349,31 @@ def _build_mindmap(title: str, options: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _placeholder_paradigm_set() -> list[dict]:
+    """构造 3 条范式占位：字段齐全、来源标未核验、跨 2 个方法族。
+
+    A 板 schema v2 只回答"要探索哪些范式"，因此这里给的是**范式**占位，
+    不是模型候选占位；模型选型由 B 闸门（design_board_gate_b.json）决定。
+    """
+    paradigms: list[dict] = []
+    for paradigm_id, name, family in PARADIGM_PLACEHOLDERS:
+        paradigms.append(
+            {
+                "paradigm_id": paradigm_id,
+                "name": name,
+                "family": family,
+                "source_ref": _source_ref(
+                    "placeholder",
+                    "待补充（例如 references/award_playbook.md#方法卡编号）",
+                    "迁移脚本生成的占位范式，没有对应的方法来源",
+                ),
+                "why_explore": PARADIGM_WHY_EXPLORE_PLACEHOLDER,
+                "explore_cost": {"level": "medium", "note": PARADIGM_COST_NOTE_PLACEHOLDER},
+            }
+        )
+    return paradigms
+
+
 def _build_question(options: list[dict], audit_used: bool) -> dict:
     goal = (
         "（迁移占位）请确认该小问的目标：从现有审计候选里选定最终模型，并说明适用条件。"
@@ -320,8 +383,12 @@ def _build_question(options: list[dict], audit_used: bool) -> dict:
     return {
         "id": "Q1",
         "goal": goal,
+        # A 板 schema v2：待探索范式集合 + 用户确认的子集（占位，等人补全）。
+        "paradigm_set": _placeholder_paradigm_set(),
+        "paradigm_selection": list(PARADIGM_SELECTION),
+        # options 保留字段只为兼容渲染器与旧流程；A 板不再要求 >=2 个模型候选。
         "options": options,
-        # 用户选择与确认一律留空：迁移不替用户做决定。
+        # 用户选择与确认一律留空：迁移不替用户做决定，A 板也不得锁定选型。
         "user_choice": None,
         "user_locked": False,
         "user_comment": "",
@@ -380,7 +447,8 @@ def _build_board(root: Path) -> tuple[dict, dict]:
 
     question = _build_question(options, audit_used=bool(candidates))
     board = {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
+        "gate": GATE_NAME,
         "board_id": f"b-migrated-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
         "language": "python",
         "created_at": _now_utc_iso(),
@@ -510,9 +578,15 @@ def migrate_workspace(workspace: str, apply: bool = False) -> dict:
         "workspace": str(root),
         "path": str(path),
         "written": False,
+        "schema_version": board["schema_version"],
+        "gate": board.get("gate"),
         "inferred": inference,
         "validated_with": validator,
         "next_steps": [NEXT_STEP_RENDER, NEXT_STEP_FILL, NEXT_STEP_CONFIRM],
+        # B 闸门：骨架不生成 B 板（不得伪造），只把补做步骤交代清楚。
+        "requires_gate_b": True,
+        "gate_b_written": False,
+        "next_steps_gate_b": [NEXT_STEP_GATE_B],
     }
 
     if not apply:
@@ -528,6 +602,184 @@ def migrate_workspace(workspace: str, apply: bool = False) -> dict:
     return report
 
 
+# ---------------------------------------------------------------------------
+# 旧板标注（--annotate-legacy）：只写元数据，绝不伪造 B 板
+# ---------------------------------------------------------------------------
+
+
+def _board_schema_version(payload: dict) -> int:
+    """读板结构版本；缺失或非法按 1（legacy）处理，与 checker / hook 同口径。"""
+    version = payload.get("schema_version")
+    if isinstance(version, int) and not isinstance(version, bool):
+        return version
+    return 1
+
+
+def _delivery_code_present(root: Path) -> list[str]:
+    """列出工作区里已存在的交付代码（根与 questions/qN/），用于判定 legacy_pre_two_gate。"""
+    found: list[str] = []
+    for name in DELIVERY_CODE_NAMES:
+        if (root / name).is_file():
+            found.append(name)
+    questions_dir = root / "questions"
+    if questions_dir.is_dir():
+        for child in sorted(questions_dir.iterdir(), key=lambda item: item.name):
+            if not child.is_dir():
+                continue
+            for name in DELIVERY_CODE_NAMES:
+                if (child / name).is_file():
+                    found.append(child.relative_to(root).as_posix() + "/" + name)
+    return found
+
+
+def _refresh_board_hash(board: dict) -> tuple[bool, str | None]:
+    """标注改过顶层字段后，把 board_sha256 / confirm_code 重新对齐到当前内容。
+
+    只重算哈希，绝不触碰 confirmed / confirmed_by / confirm_attested 这些"人确认"
+    字段：确认码本来就只是哈希前 4 位，重算等价于 render 的回写行为。
+    （``legacy_gate_a_only`` 等标记字段目前参与内容哈希，所以必须重算。）
+    """
+    module = _load_board_module()
+    if module is None:
+        return False, "缺少 design_board 模块，未重算 board_sha256（标注字段会改变内容哈希）"
+    current = str(board.get("board_sha256") or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", current):
+        return False, None
+    computed = module.compute_board_sha256(board)
+    if computed == current:
+        return False, None
+    board["board_sha256"] = computed
+    board["confirm_code"] = module.derive_confirm_code(computed)
+    return True, None
+
+
+def annotate_legacy_board(workspace: str, apply: bool = False) -> dict:
+    """给已有旧 A 板补双闸门留痕（不重写骨架、不生成 B 板）。
+
+    做三件事：
+
+    1. ``user_locked: true`` → ``false``，并写 ``migrated_release_lock: true``——
+       A 板（框架闸门）不允许锁定模型选型，锁必须由 B 闸门的 ``user_choice`` 产生；
+    2. 没有任何 ``design_board_gate_b.json`` 时写 ``legacy_gate_a_only: true``，
+       表示"A 板视为已满足、B 缺口待补"；
+    3. 同上且工作区已有交付代码时写 ``legacy_pre_two_gate: true``，
+       让 checker 在 standard 下只 warning、excellence 下判 error。
+
+    **绝不伪造 B 板**：``gate_b_written`` 永远为 false，B 闸门必须由用户本人确认。
+    """
+    root = Path(workspace)
+    if not root.exists():
+        raise ValueError(f"工作区不存在: {root}")
+    if not root.is_dir():
+        raise ValueError(f"工作区不是目录: {root}")
+    root = root.resolve()
+
+    path = root / BOARD_FILE
+    if not path.is_file():
+        raise ValueError(
+            f"缺少 {BOARD_FILE}：{path}。空工作区请先跑不带 --annotate-legacy 的迁移生成骨架。"
+        )
+    try:
+        board = json.loads(_read_text(path))
+    except (ValueError, OSError) as exc:
+        raise ValueError(f"{BOARD_FILE} 不是合法 JSON，无法标注: {exc}") from None
+    if not isinstance(board, dict):
+        raise ValueError(f"{BOARD_FILE} 顶层必须是 JSON 对象，无法标注。")
+
+    gate_b_path = root / GATE_B_FILE
+    gate_b_present = gate_b_path.is_file()
+    schema = _board_schema_version(board)
+    new_flow = schema >= 2
+
+    changes: list[str] = []
+    notes: list[str] = []
+
+    unlocked: list[str] = []
+    questions = board.get("questions")
+    if isinstance(questions, list):
+        for index, question in enumerate(questions):
+            if not isinstance(question, dict):
+                continue
+            if question.get("user_locked") is True:
+                question["user_locked"] = False
+                unlocked.append(str(question.get("id") or f"questions[{index}]"))
+    if unlocked:
+        board[RELEASE_LOCK_MARKER] = True
+        changes.append(
+            "把 %d 个 user_locked=true 的选型解锁（A 板不得锁定模型选型），并写 %s"
+            % (len(unlocked), RELEASE_LOCK_MARKER)
+        )
+
+    delivery = _delivery_code_present(root)
+    if gate_b_present:
+        if LEGACY_MARKER in board:
+            board.pop(LEGACY_MARKER, None)
+            changes.append("已有 %s，移除过期的 %s 标记" % (GATE_B_FILE, LEGACY_MARKER))
+        if PRE_TWO_GATE_MARKER in board:
+            board.pop(PRE_TWO_GATE_MARKER, None)
+            changes.append("已有 %s，移除过期的 %s 标记" % (GATE_B_FILE, PRE_TWO_GATE_MARKER))
+    elif new_flow:
+        notes.append(
+            "A 板已是 schema_version=%d（双闸门流程）但没有 B 板：**不写 legacy 标记**，"
+            "这不是 legacy 工作区，必须先补做 B 闸门才能继续写交付代码。" % schema
+        )
+    else:
+        if board.get(LEGACY_MARKER) is not True:
+            board[LEGACY_MARKER] = True
+            changes.append("写入 %s（A 板视为已满足，B 缺口待补）" % LEGACY_MARKER)
+        if delivery and board.get(PRE_TWO_GATE_MARKER) is not True:
+            board[PRE_TWO_GATE_MARKER] = True
+            changes.append(
+                "写入 %s（工作区已存在交付代码 %s）" % (PRE_TWO_GATE_MARKER, ", ".join(delivery))
+            )
+
+    recomputed, hash_note = (False, None)
+    if changes:
+        recomputed, hash_note = _refresh_board_hash(board)
+        if hash_note:
+            notes.append(hash_note)
+
+    report: dict = {
+        "action": "annotate-legacy",
+        "apply": bool(apply),
+        "workspace": str(root),
+        "path": str(path),
+        "written": False,
+        "changed": bool(changes),
+        "changes": changes,
+        "schema_version": schema,
+        "new_flow": new_flow,
+        "gate_b_present": gate_b_present,
+        "gate_b_file": str(gate_b_path),
+        # 迁移只标注 A 板，绝不生成 B 板。
+        "gate_b_written": False,
+        "legacy_gate_a_only": bool(board.get(LEGACY_MARKER)),
+        "legacy_pre_two_gate": bool(board.get(PRE_TWO_GATE_MARKER)),
+        "migrated_release_lock": bool(board.get(RELEASE_LOCK_MARKER)),
+        "unlocked_questions": unlocked,
+        "delivery_code": delivery,
+        "board_sha256_recomputed": recomputed,
+        "requires_gate_b": not gate_b_present,
+        "notes": notes,
+        "next_steps": [] if gate_b_present else [NEXT_STEP_GATE_B],
+    }
+
+    if not changes:
+        report["notes"] = notes + ["无需标注：板里已经没有 user_locked=true，且 legacy 标记与 B 板状态一致。"]
+        return report
+
+    if not apply:
+        report["board_preview"] = board
+        return report
+
+    _atomic_write_json(path, board)
+    module = _load_board_module()
+    if module is not None:
+        module.load_board(root)
+    report["written"] = True
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="旧工作区迁移：生成最小可用的 design_board.json 骨架（默认只预览）"
@@ -538,9 +790,20 @@ def main():
         action="store_true",
         help="真正写入 design_board.json（默认 dry-run，只打印将要写入的内容）",
     )
+    parser.add_argument(
+        "--annotate-legacy",
+        action="store_true",
+        help=(
+            "已存在旧 A 板时只做双闸门标注：解锁 user_locked、写 legacy_gate_a_only / "
+            "legacy_pre_two_gate 留痕；绝不重写骨架、绝不生成 B 板。"
+        ),
+    )
     args = parser.parse_args()
     try:
-        result = migrate_workspace(args.workspace, apply=args.apply)
+        if args.annotate_legacy:
+            result = annotate_legacy_board(args.workspace, apply=args.apply)
+        else:
+            result = migrate_workspace(args.workspace, apply=args.apply)
         output(result)
         sys.exit(0)
     except SystemExit:

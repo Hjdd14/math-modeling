@@ -326,3 +326,208 @@ def test_allow_legacy_does_not_relax_other_failure_codes(tmp_path):
     assert "legacy_workspace_without_board" not in issue_codes(legacy)
     # 除"缺板"这一条外，allow_legacy 不得改变任何失败码：这里两者的码集必须完全一致。
     assert issue_codes(legacy) == issue_codes(default)
+
+# ---------------------------------------------------------------------------
+# 8. 双闸门：新骨架是 A 板 schema v2（范式集合占位），且不生成 B 板
+# ---------------------------------------------------------------------------
+
+
+def test_generated_skeleton_is_gate_a_schema_v2(tmp_path):
+    """新骨架必须是 schema v2 + paradigm_set 占位，且绝不伪造 B 板。"""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    result = migrate_workspace.migrate_workspace(str(workspace), apply=True)
+    board = read_json(workspace / "design_board.json")
+
+    assert board["schema_version"] == 2
+    assert board["gate"] == "a"
+    assert result["schema_version"] == 2
+    assert result["requires_gate_b"] is True
+    assert result["gate_b_written"] is False
+    assert not (workspace / "design_board_gate_b.json").exists()
+
+    question = board["questions"][0]
+    assert len(question["paradigm_set"]) == 3
+    families = {item["family"] for item in question["paradigm_set"]}
+    assert len(families) >= 2, "范式集合必须含至少 1 个异质族"
+    for paradigm in question["paradigm_set"]:
+        for field in ("paradigm_id", "name", "family", "source_ref", "why_explore", "explore_cost"):
+            assert paradigm[field], field
+        assert paradigm["explore_cost"]["level"] in ("low", "medium", "high")
+        assert paradigm["source_ref"]["verified"] is False
+        assert paradigm["source_ref"]["unverified_reason"]
+    selection = question["paradigm_selection"]
+    assert len(selection) >= 2
+    ids = {item["paradigm_id"] for item in question["paradigm_set"]}
+    assert set(selection) <= ids
+    # A 板不得锁定选型
+    assert question["user_locked"] is False
+    assert question["user_choice"] is None
+
+
+# ---------------------------------------------------------------------------
+# 9. --annotate-legacy：解锁旧板、写 legacy 留痕、不伪造 B 板
+# ---------------------------------------------------------------------------
+
+
+def make_legacy_confirmed_board():
+    """造一份"旧流程"已确认板：user_locked=true、schema_version=1。"""
+    board = {
+        "schema_version": 1,
+        "board_id": "b-legacy-2026-10-30",
+        "language": "python",
+        "revision": 2,
+        "problem_summary": {"title": "旧工作区", "questions": ["Q1"], "key_ambiguities": []},
+        "mindmap": {"format": "mermaid", "source": "graph LR\n  P[旧题] --> Q1[Q1]"},
+        "questions": [
+            {
+                "id": "Q1",
+                "goal": "求最优方案",
+                "options": [
+                    {
+                        "id": "O1",
+                        "name": "整数规划",
+                        "rationale": "线性结构清晰",
+                        "risk": "规模变大需换求解器",
+                        "source_ref": {"type": "method_card", "ref": "OPT-01", "verified": True},
+                    },
+                    {
+                        "id": "O2",
+                        "name": "贪心启发式",
+                        "rationale": "实现简单",
+                        "risk": "无最优性保证",
+                        "source_ref": {"type": "method_card", "ref": "OPT-02", "verified": True},
+                    },
+                ],
+                "user_choice": "O1",
+                "user_locked": True,
+                "user_comment": "已锁定 O1",
+                "confirmed": True,
+            }
+        ],
+        "pending_decisions": [],
+        "no_change_rounds": 2,
+        "confirmed": True,
+        "confirmed_at": "2026-10-20T10:00:00+00:00",
+        "confirmed_by": "user",
+        "confirm_attested": True,
+    }
+    board["board_sha256"] = design_board.compute_board_sha256(board)
+    board["confirm_code"] = design_board.derive_confirm_code(board["board_sha256"])
+    return board
+
+
+def test_annotate_legacy_unlocks_selection_and_marks_gate_a_only(tmp_path):
+    """旧板 user_locked=true 迁移为 false + migrated_release_lock；无 B 板写 legacy 标记。"""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    write_json(workspace / "design_board.json", make_legacy_confirmed_board())
+    (workspace / "solution.py").write_text("print('legacy')\n", encoding="utf-8")
+
+    report = migrate_workspace.annotate_legacy_board(str(workspace), apply=True)
+
+    board = read_json(workspace / "design_board.json")
+    question = board["questions"][0]
+    assert question["user_locked"] is False, "A 板不得锁定模型选型"
+    assert question["user_choice"] == "O1", "迁移不改用户已做出的选择记录"
+    assert board["migrated_release_lock"] is True
+    assert board["legacy_gate_a_only"] is True
+    assert board["legacy_pre_two_gate"] is True
+    assert report["written"] is True
+    assert report["unlocked_questions"] == ["Q1"]
+    assert report["requires_gate_b"] is True
+    assert report["legacy_gate_a_only"] is True
+
+    # 绝不伪造确认：确认字段一字不动，也绝不生成 B 板
+    assert board["confirmed"] is True
+    assert board["confirmed_by"] == "user"
+    assert board["confirm_attested"] is True
+    assert report["gate_b_written"] is False
+    assert not (workspace / "design_board_gate_b.json").exists()
+    assert any("--gate b" in step for step in report["next_steps"])
+
+    # 标注改了顶层字段 → board_sha256 / confirm_code 必须重新对齐
+    assert board["board_sha256"] == design_board.compute_board_sha256(board)
+    assert board["confirm_code"] == board["board_sha256"][:4].upper()
+    assert report["board_sha256_recomputed"] is True
+
+
+def test_annotate_legacy_dry_run_never_writes(tmp_path):
+    """默认 dry-run：报告要说清会改什么，文件一个字节都不能动。"""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    path = workspace / "design_board.json"
+    write_json(path, make_legacy_confirmed_board())
+    before = path.read_bytes()
+
+    report = migrate_workspace.annotate_legacy_board(str(workspace), apply=False)
+
+    assert report["written"] is False
+    assert report["changed"] is True
+    assert report["board_preview"]["questions"][0]["user_locked"] is False
+    assert path.read_bytes() == before
+
+
+def test_annotate_legacy_is_idempotent(tmp_path):
+    """第二次标注不应再改任何东西（changed=False，不写盘）。"""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    write_json(workspace / "design_board.json", make_legacy_confirmed_board())
+    migrate_workspace.annotate_legacy_board(str(workspace), apply=True)
+    before = (workspace / "design_board.json").read_bytes()
+
+    report = migrate_workspace.annotate_legacy_board(str(workspace), apply=True)
+
+    assert report["changed"] is False
+    assert report["written"] is False
+    assert (workspace / "design_board.json").read_bytes() == before
+
+
+def test_annotate_legacy_drops_stale_marker_when_gate_b_exists(tmp_path):
+    """已有 B 板时不得再挂 legacy_gate_a_only（会把新流程误判成旧工作区）。"""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    board = make_legacy_confirmed_board()
+    board["legacy_gate_a_only"] = True
+    write_json(workspace / "design_board.json", board)
+    write_json(
+        workspace / "design_board_gate_b.json",
+        {"schema_version": 2, "gate": "b", "questions": [{"id": "Q1", "confirmed": False}]},
+    )
+
+    report = migrate_workspace.annotate_legacy_board(str(workspace), apply=True)
+
+    updated = read_json(workspace / "design_board.json")
+    assert "legacy_gate_a_only" not in updated
+    assert report["requires_gate_b"] is False
+    assert report["next_steps"] == []
+    assert report["gate_b_written"] is False
+
+
+def test_annotate_legacy_requires_existing_board(tmp_path):
+    """空工作区没有旧板可标注：必须报错，而不是偷偷造一份。"""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    with pytest.raises(ValueError) as excinfo:
+        migrate_workspace.annotate_legacy_board(str(workspace), apply=True)
+    assert "缺少 design_board.json" in str(excinfo.value)
+    assert not (workspace / "design_board.json").exists()
+
+
+def test_annotate_legacy_cli_writes_and_reports(tmp_path):
+    """CLI 入口：--annotate-legacy --apply 退出 0，stdout 是 JSON 报告。"""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    write_json(workspace / "design_board.json", make_legacy_confirmed_board())
+
+    proc = run_tool(MIGRATE_TOOL, "--workspace", str(workspace), "--annotate-legacy", "--apply")
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["action"] == "annotate-legacy"
+    assert payload["written"] is True
+    assert payload["legacy_gate_a_only"] is True
+    assert payload["gate_b_written"] is False
+    assert read_json(workspace / "design_board.json")["legacy_gate_a_only"] is True
